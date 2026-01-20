@@ -2,6 +2,7 @@
 
 Uma aplicação web desenvolvida em **Python** e **Streamlit** para controle pessoal de carteira de investimentos. O sistema permite registrar aportes, vendas e proventos, calculando automaticamente o preço médio, lucro realizado e a evolução patrimonial ao longo do tempo.
 
+
 ![Status do Projeto](https://img.shields.io/badge/Status-Em_Desenvolvimento-yellow)
 ![Python](https://img.shields.io/badge/Python-3.10+-blue)
 ![Streamlit](https://img.shields.io/badge/Streamlit-1.28+-red)
@@ -10,7 +11,7 @@ Uma aplicação web desenvolvida em **Python** e **Streamlit** para controle pes
 
 ### 📊 Dashboard Interativo
 - **KPIs em Tempo Real:** Total Investido (Preço de Custo), Renda Passiva (Dividendos + Caixinhas) e Lucro Realizado (Vendas).
-- **Gráfico de Evolução:** Visualização mensal de aportes (barras) e crescimento do patrimônio (linha), com projeção mínima de 12 meses.
+- **Gráfico de Evolução:** Visualização mensal de aportes (barras) e crescimento do patrimônio (linha).
 - **Alocação de Ativos:** Gráficos de Pizza interativos divididos por **Renda Fixa** e **Renda Variável**, com legendas laterais e filtros dinâmicos.
 - **Mini-Extrato:** Tabela filtrável na própria tela inicial para consulta rápida de posições.
 
@@ -33,6 +34,13 @@ Uma aplicação web desenvolvida em **Python** e **Streamlit** para controle pes
 - **SQLite:** Banco de dados local leve e eficiente.
 
 ## 🚀 Como Executar o Projeto
+
+### ⚠️ Configuração do Banco de Dados
+**Importante:** O arquivo de banco de dados (`maindata.db`) **não está incluído no repositório** para preservar a privacidade dos dados.
+
+Antes de rodar o projeto, você deve inicializar o banco localmente:
+1. Verifique a pasta `scripts/` para encontrar os arquivos de criação/migração.
+2. Execute o script creator_db.py, ele irá rodar os outros scripts de criação na ordem devida. (fiz alterações ao longo do tempo no banco de dados de maneira que não perdesse o que eu já havia inserido)
 
 ### Pré-requisitos
 Certifique-se de ter o Python instalado. Recomenda-se usar um ambiente virtual (`venv`).
