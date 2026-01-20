@@ -25,34 +25,33 @@ with tab_dash:
         carteira = {}           # Saldo atual de cada ativo
         lucro_realizado = 0.0   # Lucro obtido com vendas
         total_bonificacoes = 0.0 # Rendimento de Caixinha/Bonificações
-        
-        # Loop para os calculos
         for index, row in df.iterrows():
             ativo = row['Ativo']
             tipo = row['Tipo']
             qtd = row['Qtd']
             total = row['Total']
-            
             if ativo not in carteira:
                 carteira[ativo] = {'qtd': 0.0, 'custo_total': 0.0}
-            
             if tipo == 'Compra':
                 carteira[ativo]['qtd'] += qtd
-                carteira[ativo]['custo_total'] += total
-
+                carteira[ativo]['custo_total'] += total            
             elif tipo == 'Bonificacao':
                 carteira[ativo]['qtd'] += qtd
                 total_bonificacoes += qtd  
             elif tipo == 'Venda':
                 if carteira[ativo]['qtd'] > 0:
-                    pm = carteira[ativo]['custo_total'] / carteira[ativo]['qtd'] # Preço medio
+                    pm = carteira[ativo]['custo_total'] / carteira[ativo]['qtd']
                     custo_da_venda = pm * qtd
-                    # Lucro = Valor recebido na venda - Custo proporcional
                     lucro_operacao = total - custo_da_venda
                     lucro_realizado += lucro_operacao
-                    # Baixa no estoque
                     carteira[ativo]['qtd'] -= qtd
-                    carteira[ativo]['custo_total'] -= custo_da_venda
+                    carteira[ativo]['custo_total'] -= custo_da_venda            
+            elif tipo == 'Saque':
+                if carteira[ativo]['qtd'] > 0:
+                    pm = carteira[ativo]['custo_total'] / carteira[ativo]['qtd']
+                    custo_saque = pm * qtd
+                    carteira[ativo]['qtd'] -= qtd
+                    carteira[ativo]['custo_total'] -= custo_saque
         # TOTAIS
         patrimonio_investido = sum(item['custo_total'] for item in carteira.values())        
         proventos_caixa = df[df['Tipo'].isin(['Dividendo', 'JCP'])]['Total'].sum()
@@ -92,105 +91,107 @@ with tab_dash:
             st.info("Sem dados de compra.")
 
     with col_graf2:
-        st.subheader("Evolução Patrimonial")
-        
-        if not df.empty:
-            df['Data'] = pd.to_datetime(df['Data'])
-            df_sorted = df.sort_values('Data')
-            data_inicio = df_sorted['Data'].min().replace(day=1)
-            data_hoje = pd.Timestamp.now().replace(day=1)
-            data_futura_minima = data_inicio + pd.DateOffset(months=12)
-            data_fim = max(data_hoje, data_futura_minima)
-            date_range = pd.date_range(start=data_inicio, end=data_fim, freq='MS')
-
-            eixo_datas = []
-            eixo_aportes = []
-            eixo_acumulado = [] # Linha do total investido
+            st.subheader("Evolução Patrimonial")
             
-            # Variaveis de estado (para carregar o saldo mes a mes)
-            carteira_temp = {} 
-            
-            # Loop mes a mes
-            for data_mes in date_range:
-                # Pega só o que aconteceu neste mes
-                mask_mes = (df_sorted['Data'].dt.year == data_mes.year) & (df_sorted['Data'].dt.month == data_mes.month)
-                transacoes_mes = df_sorted[mask_mes]
+            if not df.empty:
+                # 1. Conversão de Data (Garante que funciona)
+                df['Data'] = pd.to_datetime(df['Data'])
+                df_sorted = df.sort_values('Data')
                 
-                aporte_do_mes = 0.0
+                # 2. Define o período do gráfico
+                data_inicio = df_sorted['Data'].min().replace(day=1)
+                data_hoje = pd.Timestamp.now().replace(day=1)
                 
-                # Processa as transacoes do mes para atualizar a carteira
-                for _, row in transacoes_mes.iterrows():
-                    ativo = row['Ativo']
-                    tipo = row['Tipo']
-                    qtd = row['Qtd']
-                    total = row['Total']
+                # Garante pelo menos 12 meses de visão
+                data_futura_minima = data_inicio + pd.DateOffset(months=12)
+                data_fim = max(data_hoje, data_futura_minima)
+                
+                date_range = pd.date_range(start=data_inicio, end=data_fim, freq='MS')
+                
+                # Listas para o grafico
+                eixo_datas = []
+                eixo_aportes = []
+                eixo_acumulado = [] 
+                carteira_temp = {} 
+                for data_mes in date_range:
+                    # Filtra transações deste mes específico
+                    mask_mes = (df_sorted['Data'].dt.year == data_mes.year) & (df_sorted['Data'].dt.month == data_mes.month)
+                    transacoes_mes = df_sorted[mask_mes]
                     
-                    if ativo not in carteira_temp:
-                        carteira_temp[ativo] = {'qtd': 0.0, 'custo_total': 0.0}
+                    aporte_do_mes = 0.0
                     
-                    if tipo == 'Compra':
-                        carteira_temp[ativo]['qtd'] += qtd
-                        carteira_temp[ativo]['custo_total'] += total
-                        aporte_do_mes += total # Soma na barra de aporte
+                    # Processa cada transação do mês
+                    for _, row in transacoes_mes.iterrows():
+                        ativo = row['Ativo']
+                        tipo = row['Tipo']
+                        qtd = row['Qtd']
+                        total = row['Total']
                         
-                    elif tipo == 'Bonificacao':
-                        carteira_temp[ativo]['qtd'] += qtd
-                        # Custo zero, não soma no aporte financeiro
+                        if ativo not in carteira_temp:
+                            carteira_temp[ativo] = {'qtd': 0.0, 'custo_total': 0.0}
                         
-                    elif tipo == 'Venda':
-                        if carteira_temp[ativo]['qtd'] > 0:
-                            # Abate do custo proporcional
-                            pm = carteira_temp[ativo]['custo_total'] / carteira_temp[ativo]['qtd']
-                            custo_da_venda = pm * qtd
+                        if tipo == 'Compra':
+                            carteira_temp[ativo]['qtd'] += qtd
+                            carteira_temp[ativo]['custo_total'] += total
+                            aporte_do_mes += total 
                             
-                            carteira_temp[ativo]['qtd'] -= qtd
-                            carteira_temp[ativo]['custo_total'] -= custo_da_venda
-                            # Nota: Venda reduz a linha de acumulado, mas não gera barra negativa
-                
-                # Calcula quanto tenho investido (Custo) no final deste mes
-                total_investido_mes = sum(item['custo_total'] for item in carteira_temp.values())
-                
-                eixo_datas.append(data_mes)
-                eixo_aportes.append(aporte_do_mes)
-                eixo_acumulado.append(total_investido_mes)
+                        elif tipo == 'Bonificacao':
+                            carteira_temp[ativo]['qtd'] += qtd
+                            
+                        elif tipo == 'Venda':
+                            if carteira_temp[ativo]['qtd'] > 0:
+                                pm = carteira_temp[ativo]['custo_total'] / carteira_temp[ativo]['qtd']
+                                custo_da_venda = pm * qtd
+                                carteira_temp[ativo]['qtd'] -= qtd
+                                carteira_temp[ativo]['custo_total'] -= custo_da_venda
 
-            fig_evolucao = go.Figure()
-            fig_evolucao.add_trace(go.Bar(
-                x=eixo_datas, 
-                y=eixo_aportes, 
-                name='Aporte Mensal',
-                marker_color='rgba(54, 162, 235, 0.6)'
-            ))
-            fig_evolucao.add_trace(go.Scatter(
-                x=eixo_datas, 
-                y=eixo_acumulado, 
-                name='Total Investido (Custo)',
-                mode='lines+markers',
-                line=dict(color='#4bc0c0', width=3)
-            ))
-            
-            fig_evolucao.update_layout(
-                hovermode="x unified",
-                legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
-                margin=dict(t=20, b=20, l=20, r=20),
-                xaxis=dict(
-                    tickformat="%b/%Y", 
-                    dtick="M1"
+                        elif tipo == 'Saque':
+                            if carteira_temp[ativo]['qtd'] > 0:
+                                pm = carteira_temp[ativo]['custo_total'] / carteira_temp[ativo]['qtd']
+                                custo_saque = pm * qtd
+                                carteira_temp[ativo]['qtd'] -= qtd
+                                carteira_temp[ativo]['custo_total'] -= custo_saque
+
+                    total_investido_mes = sum(item['custo_total'] for item in carteira_temp.values())
+                    
+                    # Salva nas listas para o gráfico
+                    eixo_datas.append(data_mes)
+                    eixo_aportes.append(aporte_do_mes)
+                    eixo_acumulado.append(total_investido_mes)
+
+                fig_evolucao = go.Figure()
+                
+                fig_evolucao.add_trace(go.Bar(
+                    x=eixo_datas, 
+                    y=eixo_aportes, 
+                    name='Aporte Mensal',
+                    marker_color='rgba(54, 162, 235, 0.6)'
+                ))
+                
+                fig_evolucao.add_trace(go.Scatter(
+                    x=eixo_datas, 
+                    y=eixo_acumulado, 
+                    name='Total Investido (Custo)',
+                    mode='lines+markers',
+                    line=dict(color='#4bc0c0', width=3)
+                ))
+                
+                fig_evolucao.update_layout(
+                    hovermode="x unified",
+                    legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+                    margin=dict(t=20, b=20, l=20, r=20),
+                    xaxis=dict(tickformat="%b/%Y", dtick="M1")
                 )
-            )
-            
-            st.plotly_chart(fig_evolucao, use_container_width=True)
-        else:
-            st.info("Sem dados para gerar gráfico de evolução.")
+                
+                st.plotly_chart(fig_evolucao, use_container_width=True)
+            else:
+                st.info("Sem dados para gerar gráfico de evolução.")
     st.divider()
     lista_posicao = []
 
     for ativo, dados_ativo in carteira.items():
-        if dados_ativo['custo_total'] > 0.01: # Filtra apenas o que tem saldo
-            # Busca categoria no DF original (primeira ocorrência)
+        if dados_ativo['custo_total'] > 0.01: 
             cat_original = df[df['Ativo'] == ativo]['Categoria'].iloc[0] if 'Categoria' in df.columns else "Outros"
-            
-            # Define Classe
             classe = 'Renda Fixa' if cat_original in MAPA_CLASSES['Renda Fixa'] else 'Renda Variável'
             
             lista_posicao.append({
@@ -203,10 +204,7 @@ with tab_dash:
     df_posicao = pd.DataFrame(lista_posicao)
 
     st.divider()
-    
-    # --- BLOCO DE DETALHAMENTO (PIZZAS + EXTRATO) ---
-    
-    # 1. Preparar dados consolidados
+ 
     lista_posicao = []
     for ativo, dados_ativo in carteira.items():
         if dados_ativo['custo_total'] > 0.01:
@@ -285,7 +283,7 @@ with tab_extrato:
             data_inicial = st.date_input("Data Inicial", date(2023, 1, 1))
             data_final = st.date_input("Data Final", date.today())
         with col_f2:
-            tipos_opcoes = ["Compra", "Venda", "Dividendo", "JCP", "Taxa", "Cambio", "Bonificacao"]
+            tipos_opcoes = ["Compra", "Venda", "Saque", "Dividendo", "JCP", "Taxa", "Cambio", "Bonificacao"]
             tipos_selecionados = st.multiselect("Filtrar Tipo", tipos_opcoes, default=tipos_opcoes)
 
     dados = database.consultar_extrato()
@@ -334,7 +332,7 @@ with tab_registrar:
             with c1:
                 ativo = st.text_input("Ativo").upper()
             with c2:
-                tipo = st.selectbox("Tipo", ["Compra", "Venda", "Dividendo", "JCP", "Taxa", "Cambio", "Bonificacao"])
+                tipo = st.selectbox("Tipo", ["Compra", "Venda", "Saque", "Dividendo", "JCP", "Taxa", "Cambio", "Bonificacao"])
             
             col_cat1, col_cat2 = st.columns(2)
             with col_cat1:
