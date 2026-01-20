@@ -1,5 +1,5 @@
-db/*.db
 *.db
+!db /.gitkeep
 
 __pycache__/
 *.pyc
