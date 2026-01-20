@@ -1,5 +1,6 @@
 import streamlit as st, pandas as pd, plotly.express as px, plotly.graph_objects as go
 from datetime import date
+from utils import *
 import database
 MAPA_CLASSES = {
     "Renda Fixa": ["Tesouro Direto", "CDB", "LCI/LCA", "Debêntures", "Caixinha"],
@@ -10,61 +11,33 @@ LISTA_CATEGORIAS = [item for sublist in MAPA_CLASSES.values() for item in sublis
 st.set_page_config(page_title="Meus Investimentos", layout="wide")
 st.title("💰 Gerenciador de Investimentos")
 
-tab_dash, tab_extrato, tab_registrar, tab_simular = st.tabs(["📊 Dashboard", "📑 Extrato", "⚙️ Registrador", "🔮 Simular"])
+tab_dash, tab_extrato, tab_registrar, tab_simular, tab_rebal = st.tabs(["📊 Dashboard", "📑 Extrato", "⚙️ Registrador", "🔮 Simular", "⚖️ Rebalanceador"])
 
 with tab_dash:
     st.header("Visão Geral & Performance")
     dados = database.consultar_extrato()
+    
     if not dados:
         st.info("Cadastre operações na aba 'Gerenciar' para ver os indicadores.")
     else:
-        colunas_db = ["ID", "Data", "Ativo", "Tipo", "Qtd", "Preço", "Total", "Corretora", "Categoria", "Moeda", "Cambio", "Obs"]     
+        colunas_db = ["ID", "Data", "Ativo", "Tipo", "Qtd", "Preço", "Total", "Corretora", "Categoria", "Moeda", "Cambio", "Obs"]
+        if len(dados[0]) != 12: colunas_db = ["ID", "Data", "Ativo", "Tipo", "Qtd", "Preço", "Total", "Corretora", "Moeda", "Cambio", "Obs"]
         df = pd.DataFrame(dados, columns=colunas_db)
-        df = df.sort_values('Data') 
-
-        carteira = {}           # Saldo atual de cada ativo
-        lucro_realizado = 0.0   # Lucro obtido com vendas
-        total_bonificacoes = 0.0 # Rendimento de Caixinha/Bonificações
-        for index, row in df.iterrows():
-            ativo = row['Ativo']
-            tipo = row['Tipo']
-            qtd = row['Qtd']
-            total = row['Total']
-            if ativo not in carteira:
-                carteira[ativo] = {'qtd': 0.0, 'custo_total': 0.0}
-            if tipo == 'Compra':
-                carteira[ativo]['qtd'] += qtd
-                carteira[ativo]['custo_total'] += total            
-            elif tipo == 'Bonificacao':
-                carteira[ativo]['qtd'] += qtd
-                total_bonificacoes += qtd  
-            elif tipo == 'Venda':
-                if carteira[ativo]['qtd'] > 0:
-                    pm = carteira[ativo]['custo_total'] / carteira[ativo]['qtd']
-                    custo_da_venda = pm * qtd
-                    lucro_operacao = total - custo_da_venda
-                    lucro_realizado += lucro_operacao
-                    carteira[ativo]['qtd'] -= qtd
-                    carteira[ativo]['custo_total'] -= custo_da_venda            
-            elif tipo == 'Saque':
-                if carteira[ativo]['qtd'] > 0:
-                    pm = carteira[ativo]['custo_total'] / carteira[ativo]['qtd']
-                    custo_saque = pm * qtd
-                    carteira[ativo]['qtd'] -= qtd
-                    carteira[ativo]['custo_total'] -= custo_saque
-        # TOTAIS
-        patrimonio_investido = sum(item['custo_total'] for item in carteira.values())        
+        df['Data'] = pd.to_datetime(df['Data'])
+        carteira = calcular_carteira_atual(df)
+        lucro_realizado = calcular_lucro_realizado(df)
+        total_bonificacoes = calcular_total_bonificacoes(df)
+        patrimonio_investido = sum(item['custo_total'] for item in carteira.values())
         proventos_caixa = df[df['Tipo'].isin(['Dividendo', 'JCP'])]['Total'].sum()
         renda_passiva_total = proventos_caixa + total_bonificacoes
-
         col1, col2, col3 = st.columns(3)
         with col1:
-            st.metric("Total Investido (Custo)", f"R$ {patrimonio_investido:,.2f}", help="Soma dos aportes menos o custo das vendas.")
+            st.metric("Total Investido (Custo)", f"R$ {patrimonio_investido:,.2f}")
         with col2:
-            st.metric("Renda Passiva (Div + Caixinha)", f"R$ {renda_passiva_total:,.2f}", help="Dividendos, JCP e Rendimentos da Caixinha.")
+            st.metric("Renda Passiva (Div + Caixinha)", f"R$ {renda_passiva_total:,.2f}")
         with col3:
             st.metric("Lucro Realizado (Vendas)", f"R$ {lucro_realizado:,.2f}", 
-                      delta=f"{lucro_realizado:,.2f}" if lucro_realizado != 0 else None)
+                        delta=f"{lucro_realizado:,.2f}" if lucro_realizado != 0 else None)
     
     st.divider()
     col_graf1, col_graf2 = st.columns([1, 2])
@@ -188,24 +161,6 @@ with tab_dash:
                 st.info("Sem dados para gerar gráfico de evolução.")
     st.divider()
     lista_posicao = []
-
-    for ativo, dados_ativo in carteira.items():
-        if dados_ativo['custo_total'] > 0.01: 
-            cat_original = df[df['Ativo'] == ativo]['Categoria'].iloc[0] if 'Categoria' in df.columns else "Outros"
-            classe = 'Renda Fixa' if cat_original in MAPA_CLASSES['Renda Fixa'] else 'Renda Variável'
-            
-            lista_posicao.append({
-                'Ativo': ativo,
-                'Categoria': cat_original,
-                'Classe': classe,
-                'Total Investido': dados_ativo['custo_total']
-            })
-
-    df_posicao = pd.DataFrame(lista_posicao)
-
-    st.divider()
- 
-    lista_posicao = []
     for ativo, dados_ativo in carteira.items():
         if dados_ativo['custo_total'] > 0.01:
             cat_original = df[df['Ativo'] == ativo]['Categoria'].iloc[0] if 'Categoria' in df.columns else "Outros"
@@ -274,6 +229,7 @@ with tab_dash:
                     "Ativo": st.column_config.TextColumn(width="small")
                 }
             )
+
 with tab_extrato:
     st.header("Histórico de Transações")
     
@@ -369,3 +325,177 @@ with tab_registrar:
         if st.button("Apagar Registro"):
             database.del_transacao(id_del)
             st.success(f"Registro ID {id_del} removido.")
+
+with tab_simular:
+
+    st.header("🔮 Simulador de Vendas & Lucro")
+    
+    dados = database.consultar_extrato()
+    
+    if not dados:
+        st.warning("Sem dados para simular.")
+    else:
+        colunas_db = ["ID", "Data", "Ativo", "Tipo", "Qtd", "Preço", "Total", "Corretora", "Categoria", "Moeda", "Cambio", "Obs"]
+        if len(dados[0]) != 12: colunas_db = ["ID", "Data", "Ativo", "Tipo", "Qtd", "Preço", "Total", "Corretora", "Moeda", "Cambio", "Obs"]
+        df = pd.DataFrame(dados, columns=colunas_db)
+        carteira_sim = calcular_carteira_atual(df) 
+        ativos_disponiveis = sorted(list(carteira_sim.keys()))
+        
+        if not ativos_disponiveis:
+            st.info("Você não possui ativos em carteira para simular.")
+        else:
+            c1, c2, c3 = st.columns(3)
+            with c1:
+                ativo_sel = st.selectbox("Selecione o Ativo", sorted(ativos_disponiveis))
+            dados_ativo = carteira_sim[ativo_sel]
+            qtd_atual = dados_ativo['qtd']
+            custo_total = dados_ativo['custo_total']
+            pm_atual = custo_total / qtd_atual if qtd_atual > 0 else 0
+            
+            with c2:
+                preco_simulado = st.number_input("Preço de Venda (Cotação Atual)", value=float(round(pm_atual, 2)), min_value=0.01, step=0.01)
+            
+            with c3:
+                st.metric("Seu Preço Médio (PM)", f"R$ {pm_atual:,.2f}")
+
+            st.divider()
+            st.subheader("Cenário vendendo 100%")
+            
+            if qtd_atual > 0:
+                valor_venda_bruto = qtd_atual * preco_simulado
+                custo_proporcional = qtd_atual * pm_atual
+                lucro_bruto = valor_venda_bruto - custo_proporcional
+                roi_pct = (lucro_bruto / custo_proporcional) * 100 if custo_proporcional > 0 else 0
+                col_res1, col_res2, col_res3 = st.columns(3)
+                
+                with col_res1:
+                    st.metric("Valor Total da Venda", f"R$ {valor_venda_bruto:,.2f}")
+                
+                with col_res2:
+                    st.metric(
+                        "Lucro/Prejuízo Estimado", 
+                        f"R$ {lucro_bruto:,.2f}",
+                        delta=f"{roi_pct:.2f}%",
+                        delta_color="normal"
+                    )
+                
+                with col_res3:
+                    st.markdown(f"""
+                    **Resumo da Operação:**
+                    - Você venderia **{qtd_atual:,.4f}** unidades.
+                    """)
+                st.markdown("### ⚡ Cenários Rápidos")
+                cenarios = [0.25, 0.50, 0.75, 1.0]
+                lista_cenarios = []
+                
+                for p in cenarios:
+                    q = qtd_atual * p
+                    v = q * preco_simulado
+                    c = q * pm_atual
+                    l = v - c
+                    lista_cenarios.append({
+                        "Cenário": f"Vender {int(p*100)}%",
+                        "Qtd": q,
+                        "Receba (R$)": v,
+                        "Lucro (R$)": l
+                    })
+                
+                df_cenarios = pd.DataFrame(lista_cenarios)
+                st.dataframe(
+                    df_cenarios, 
+                    hide_index=True, 
+                    use_container_width=True,
+                    column_config={
+                        "Receba (R$)": st.column_config.NumberColumn(format="R$ %.2f"),
+                        "Lucro (R$)": st.column_config.NumberColumn(format="R$ %.2f"),
+                        "Qtd": st.column_config.NumberColumn(format="%.4f"),
+                    }
+                )
+
+with tab_rebal:
+    st.header("⚖️ Rebalanceamento Automático")
+    
+    dados = database.consultar_extrato()
+    
+    if not dados:
+        st.warning("Cadastre operações primeiro.")
+    else:
+        colunas_db = ["ID", "Data", "Ativo", "Tipo", "Qtd", "Preço", "Total", "Corretora", "Categoria", "Moeda", "Cambio", "Obs"]
+        if len(dados[0]) != 12: colunas_db = ["ID", "Data", "Ativo", "Tipo", "Qtd", "Preço", "Total", "Corretora", "Moeda", "Cambio", "Obs"]
+        df_raw = pd.DataFrame(dados, columns=colunas_db)
+        
+        carteira_atual = calcular_carteira_atual(df_raw)
+        
+        if not carteira_atual:
+            st.info("Carteira zerada.")
+        else:
+            st.markdown("### 1️⃣ Parâmetros")
+            c1, c2 = st.columns(2)
+            with c1:
+                cotacao_dolar = st.number_input("🇺🇸 Dólar Hoje (R$)", value=5.00, step=0.01, format="%.2f")
+            with c2:
+                aporte = st.number_input("💰 Aporte Novo (R$)", min_value=0.0, step=100.0)
+
+            st.divider()
+            st.markdown("### 2️⃣ Atualize os Preços")
+            
+            df_editor = preparar_dados_editor(carteira_atual, df_raw)
+            
+            df_editado = st.data_editor(
+                df_editor,
+                column_config={
+                    "Ativo": st.column_config.TextColumn(disabled=True),
+                    "Classificação": st.column_config.TextColumn(disabled=True),
+                    "Qtd Atual": st.column_config.NumberColumn(disabled=True, format="%.4f"),
+                    "Preço Hoje": st.column_config.NumberColumn(min_value=0.0, step=0.01, required=True, format="%.2f"),
+                    "Em Dólar?": st.column_config.CheckboxColumn(help="Marque se o preço é em US$.")
+                },
+                hide_index=True,
+                use_container_width=True,
+                key="editor_rebal_clean"
+            )
+            
+            if st.button("🔄 Calcular Rebalanceamento", type="primary"):
+                if df_editado["Preço Hoje"].min() <= 0:
+                    st.error("⚠️ Preencha todos os preços.")
+                else:
+                    resultados = calcular_rebalanceamento(df_editado, aporte, cotacao_dolar)            
+                    st.divider()
+                    st.subheader("📊 Diagnóstico (Em Reais)")
+                    
+                    col_metrics = st.columns(4)
+                    df_comp = resultados["df_comparacao"]
+                    
+                    for index, row in df_comp.iterrows():
+                        with col_metrics[index]:
+                            st.metric(
+                                label=row["Categoria"],
+                                value=f"{row['Pct Atual']*100:.1f}%",
+                                delta=f"Meta: {row['Meta Pct']*100:.0f}%",
+                                delta_color="off"
+                            )
+                    
+                    st.divider()
+                    st.subheader("🎯 Plano de Ação")
+                    
+                    c1, c2 = st.columns(2)
+                    with c1:
+                        compras = resultados["df_compras"]
+                        if not compras.empty:
+                            st.success("### ✅ Comprar")
+                            st.table(compras[["Categoria", "Diferença (R$)"]].style.format({"Diferença (R$)": "R$ {:,.2f}"}))
+                        else:
+                            st.info("Nada para comprar.")
+                            
+                    with c2:
+                        vendas = resultados["df_vendas"]
+                        if not vendas.empty:
+                            st.error("### 🔻 Vender")
+                            vendas_view = vendas.copy()
+                            vendas_view["Diferença (R$)"] = vendas_view["Diferença (R$)"].abs()
+                            st.table(vendas_view[["Categoria", "Diferença (R$)"]].style.format({"Diferença (R$)": "R$ {:,.2f}"}))
+                        else:
+                            st.success("Nada para vender.")
+
+                    if resultados["valor_outros"] > 0:
+                        st.warning(f"⚠️ Ativos não classificados somam R$ {resultados['valor_outros']:,.2f}.")
