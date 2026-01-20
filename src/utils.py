@@ -1,6 +1,8 @@
 import pandas as pd, json, os
 from datetime import datetime
 
+# Funções de cálculos primários
+
 def calcular_total_bonificacoes(df):
     """
     Retorna apenas a soma financeira do que entrou como Bonificação/Caixinha.
@@ -62,6 +64,8 @@ def _processar_fluxo_caixa(df):
                 carteira[ativo]['custo_total'] -= custo_saida
     carteira_limpa = {k: v for k, v in carteira.items() if v['qtd'] > 0.000001}
     return carteira_limpa, lucro_acumulado
+
+# Funções do rabalanceamento
 
 METAS_REBAL = {
     'Renda Fixa': 0.50,
@@ -151,7 +155,8 @@ def calcular_rebalanceamento(df_editado, aporte, cotacao_dolar):
         "patrimonio_atual": patrimonio_atual,
         "patrimonio_final": patrimonio_final
     }
-# --- FUNÇÕES DE BACKUP (COM CORREÇÃO DE CAMINHO) ---
+
+# Funções de backup
 
 def obter_caminho_db(nome_arquivo):
     """
