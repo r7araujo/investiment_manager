@@ -1,4 +1,5 @@
-import pandas as pd
+import pandas as pd, json, os
+from datetime import datetime
 
 def calcular_total_bonificacoes(df):
     """
@@ -150,3 +151,35 @@ def calcular_rebalanceamento(df_editado, aporte, cotacao_dolar):
         "patrimonio_atual": patrimonio_atual,
         "patrimonio_final": patrimonio_final
     }
+# --- FUNÇÕES DE BACKUP (COM CORREÇÃO DE CAMINHO) ---
+
+def obter_caminho_db(nome_arquivo):
+    """
+    Função auxiliar para encontrar o arquivo correto independente de onde
+    o terminal esteja aberto.
+    """
+    pasta_src = os.path.dirname(os.path.abspath(__file__))
+    pasta_raiz = os.path.dirname(pasta_src)
+    return os.path.join(pasta_raiz, 'db', nome_arquivo)
+
+def obter_arquivo_banco():
+    """Lê o arquivo binário do banco de dados para download."""
+    caminho_db = obter_caminho_db('maindata.db')
+    
+    if os.path.exists(caminho_db):
+        with open(caminho_db, 'rb') as f:
+            return f.read()
+    return None
+
+def registrar_data_backup():
+    """Salva apenas a data e hora atual no log."""
+    agora = datetime.now().strftime("%d/%m/%Y às %H:%M:%S")
+    dados = {"ultimo_backup": agora}
+    
+    caminho_log = obter_caminho_db('backup_log.json')
+    
+    try:
+        with open(caminho_log, 'w') as f:
+            json.dump(dados, f)
+    except Exception as e:
+        print(f"Erro ao salvar log de backup: {e}")

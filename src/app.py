@@ -325,6 +325,23 @@ with tab_registrar:
         if st.button("Apagar Registro"):
             database.del_transacao(id_del)
             st.success(f"Registro ID {id_del} removido.")
+        st.divider()
+
+        st.subheader("💾 Backup e Segurança")
+        arquivo_bytes = obter_arquivo_banco()
+        
+        if arquivo_bytes:
+            st.download_button(
+                label="📥 Baixar Backup (.db)",
+                data=arquivo_bytes,
+                file_name="maindata_backup.db",
+                mime="application/x-sqlite3",
+                on_click=registrar_data_backup,
+                help="Salva uma cópia do banco de dados na pasta Downloads."
+            )
+            st.caption("O arquivo será salvo na sua pasta de Downloads padrão.")
+        else:
+            st.error("Erro: Arquivo 'maindata.db' não encontrado.")
 
 with tab_simular:
 
