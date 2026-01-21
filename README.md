@@ -55,6 +55,7 @@ Pré-requisito: Ter o Docker Desktop instalado.
    git clone [https://github.com/r7araujo/investiment-manager.git](https://github.com/r7araujo/investiment-manager.git)
    cd investiment-manager
    docker-compose up
+   
 3. Pronto! Acesse o navegador em: http://localhost:8501
 
 Opção 2: Instalação Manual (Local)
@@ -65,6 +66,7 @@ Pré-requisito: Ter Python 3.10+ instalado.
    ```bash
    git clone [https://github.com/r7araujo/investiment-manager.git](https://github.com/r7araujo/investiment-manager.git)
    cd investiment-manager
+   
 2. Crie um ambiente virtual e instale as dependências:
    ```bash
    python -m venv venv
@@ -73,6 +75,7 @@ Pré-requisito: Ter Python 3.10+ instalado.
    # Linux/Mac:
    source venv/bin/activate
    pip install -r requirements.txt
+   
 3. Execute o Streamlit:
    ```bash
    streamlit run src/app.py
