@@ -1,0 +1,10 @@
+services:
+  app:
+    build: .
+    container_name: investment_manager
+    ports:
+      - "8501:8501"
+    volumes:
+      - ./db:/app/db
+      - ./src:/app/src
+    restart: always

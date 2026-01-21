@@ -4,6 +4,8 @@ from datetime import datetime
 DIRETORIO_ATUAL = os.path.dirname(os.path.abspath(__file__))
 CAMINHO_DB = os.path.join(DIRETORIO_ATUAL, '..', 'db', 'maindata.db')
 
+# Funções que gerenciam o maindata.db
+
 def conectar():
     """Conecta ao banco de dados e retorna a conexão."""
     return sqlite3.connect(CAMINHO_DB)
@@ -79,3 +81,45 @@ def consultar_extrato():
     finally:
         conn.close()
 
+# Funções de meta
+def inicializar_tabela_metas():
+    """Cria a tabela de metas se não existir."""
+    conn = conectar()
+    cursor = conn.cursor()
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS metas (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        tipo TEXT NOT NULL,          -- Ex: 'Patrimônio Total', 'Categoria', 'Renda Passiva'
+        filtro TEXT,                 -- Ex: 'Renda Fixa', 'FII', ou vazio se for geral
+        valor_alvo REAL NOT NULL,
+        data_limite TEXT,            -- Opcional
+        descricao TEXT
+    )
+    """)
+    conn.commit()
+    conn.close()
+
+def criar_meta(tipo, filtro, valor_alvo, data_limite, descricao):
+    conn = conectar()
+    cursor = conn.cursor()
+    cursor.execute("""
+    INSERT INTO metas (tipo, filtro, valor_alvo, data_limite, descricao)
+    VALUES (?, ?, ?, ?, ?)
+    """, (tipo, filtro, valor_alvo, data_limite, descricao))
+    conn.commit()
+    conn.close()
+
+def listar_metas():
+    conn = conectar()
+    cursor = conn.cursor()
+    cursor.execute("SELECT * FROM metas")
+    dados = cursor.fetchall()
+    conn.close()
+    return dados
+
+def excluir_meta(id_meta):
+    conn = conectar()
+    cursor = conn.cursor()
+    cursor.execute("DELETE FROM metas WHERE id = ?", (id_meta,))
+    conn.commit()
+    conn.close()

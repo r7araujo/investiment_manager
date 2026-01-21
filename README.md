@@ -35,19 +35,44 @@ Uma aplicação web desenvolvida em **Python** e **Streamlit** para controle pes
 
 ## 🚀 Como Executar o Projeto
 
-### ⚠️ Configuração do Banco de Dados
-**Importante:** O arquivo de banco de dados (`maindata.db`) **não está incluído no repositório** para preservar a privacidade dos dados.
+### ⚠️ Configuração do Banco de Dados (Passo Obrigatório)
+**Importante:** O arquivo de banco de dados (`maindata.db`) **não está incluído no repositório** para preservar a privacidade dos dados. Antes de rodar o projeto pela primeira vez, você deve inicializá-lo:
 
-Antes de rodar o projeto, você deve inicializar o banco localmente:
-1. Verifique a pasta `scripts/` para encontrar os arquivos de criação/migração.
-2. Execute o script creator_db.py, ele irá rodar os outros scripts de criação na ordem devida. (fiz alterações ao longo do tempo no banco de dados de maneira que não perdesse o que eu já havia inserido)
+1. Certifique-se de estar na raiz do projeto.
+2. Execute o script de criação (ele aplica as migrações na ordem correta):
+   ```bash
+   python scripts/creator_db.py
+Isso criará o arquivo maindata.db dentro da pasta db/.
+🏃‍♂️ Iniciando a Aplicação
 
-### Pré-requisitos
-Certifique-se de ter o Python instalado. Recomenda-se usar um ambiente virtual (`venv`).
+Você pode executar o projeto de duas maneiras: usando Docker (ambiente isolado e automático) ou Manualmente (Python local).
+Opção 1: Usando Docker (Recomendado)
 
-1. **Clone o repositório:**
+Pré-requisito: Ter o Docker Desktop instalado.
+
+   Clone o repositório e entre na pasta:
    ```bash
    git clone [https://github.com/r7araujo/investiment-manager.git](https://github.com/r7araujo/investiment-manager.git)
    cd investiment-manager
+   docker-compose up
+3. Pronto! Acesse o navegador em: http://localhost:8501
+
+Opção 2: Instalação Manual (Local)
+
+Pré-requisito: Ter Python 3.10+ instalado.
+
+1. Clone o repositório e entre na pasta:
+   ```bash
+   git clone [https://github.com/r7araujo/investiment-manager.git](https://github.com/r7araujo/investiment-manager.git)
+   cd investiment-manager
+2. Crie um ambiente virtual e instale as dependências:
+   ```bash
+   python -m venv venv
+   # Windows:
+   .\venv\Scripts\activate
+   # Linux/Mac:
+   source venv/bin/activate
    pip install -r requirements.txt
+3. Execute o Streamlit:
+   ```bash
    streamlit run src/app.py

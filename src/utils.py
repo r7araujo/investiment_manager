@@ -188,3 +188,49 @@ def registrar_data_backup():
             json.dump(dados, f)
     except Exception as e:
         print(f"Erro ao salvar log de backup: {e}")
+
+# Funções de meta
+
+def calcular_progresso_metas(df_transacoes, lista_metas):
+    """
+    Recebe o DataFrame de transações e a lista de metas do banco.
+    Retorna uma lista de dicionários com o progresso calculado.
+    """
+    resultados = []
+    carteira_atual = calcular_carteira_atual(df_transacoes)
+    total_investido = sum(item['custo_total'] for item in carteira_atual.values())
+    total_proventos = df_transacoes[df_transacoes['Tipo'].isin(['Dividendo', 'JCP'])]['Total'].sum()
+    for meta in lista_metas:
+        id_meta, tipo, filtro, valor_alvo, data_limite, descricao = meta
+        
+        valor_atual = 0.0
+        if tipo == 'Patrimônio Total':
+            valor_atual = total_investido
+            
+        elif tipo == 'Total em Categoria':
+            for ativo, dados in carteira_atual.items():
+                cat_original = df_transacoes[df_transacoes['Ativo'] == ativo]['Categoria'].iloc[0]
+                classe = classificar_ativo(cat_original, ativo)
+                if filtro.lower() == classe.lower():
+                    valor_atual += dados['custo_total']
+                    
+        elif tipo == 'Renda Passiva (Total)':
+            valor_atual = total_proventos
+        progresso_pct = (valor_atual / valor_alvo) if valor_alvo > 0 else 0
+        if progresso_pct > 1.0: progresso_pct = 1.0
+        
+        falta = valor_alvo - valor_atual
+        if falta < 0: falta = 0
+        
+        resultados.append({
+            "id": id_meta,
+            "titulo": descricao if descricao else f"{tipo} - {filtro}",
+            "tipo": tipo,
+            "valor_atual": valor_atual,
+            "valor_alvo": valor_alvo,
+            "falta": falta,
+            "pct": progresso_pct,
+            "data_limite": data_limite
+        })
+        
+    return resultados

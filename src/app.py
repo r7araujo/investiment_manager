@@ -1,7 +1,8 @@
 import streamlit as st, pandas as pd, plotly.express as px, plotly.graph_objects as go
 from datetime import date
 from utils import *
-import database
+from database import *
+inicializar_tabela_metas()
 MAPA_CLASSES = {
     "Renda Fixa": ["Tesouro Direto", "CDB", "LCI/LCA", "Debêntures", "Caixinha"],
     "Renda Variável": ["Ações", "FIIs", "Stocks", "REITs", "ETF", "Criptomoedas", "BDR"]
@@ -11,11 +12,14 @@ LISTA_CATEGORIAS = [item for sublist in MAPA_CLASSES.values() for item in sublis
 st.set_page_config(page_title="Meus Investimentos", layout="wide")
 st.title("💰 Gerenciador de Investimentos")
 
-tab_dash, tab_extrato, tab_registrar, tab_simular, tab_rebal = st.tabs(["📊 Dashboard", "📑 Extrato", "⚙️ Registrador", "🔮 Simular", "⚖️ Rebalanceador"])
+tab_dash, tab_extrato, tab_registrar, tab_simular, tab_rebal, tab_metas = st.tabs([
+    "📊 Dashboard", "📑 Extrato", "⚙️ Registrador", "🔮 Simular", "⚖️ Rebalanceador", "🎯 Metas"
+    ])
+
 
 with tab_dash:
     st.header("Visão Geral & Performance")
-    dados = database.consultar_extrato()
+    dados = consultar_extrato()
     
     if not dados:
         st.info("Cadastre operações na aba 'Gerenciar' para ver os indicadores.")
@@ -242,7 +246,7 @@ with tab_extrato:
             tipos_opcoes = ["Compra", "Venda", "Saque", "Dividendo", "JCP", "Taxa", "Cambio", "Bonificacao"]
             tipos_selecionados = st.multiselect("Filtrar Tipo", tipos_opcoes, default=tipos_opcoes)
 
-    dados = database.consultar_extrato()
+    dados = consultar_extrato()
     
     if dados:
         qtd_cols = len(dados[0])
@@ -312,7 +316,7 @@ with tab_registrar:
                 if not ativo:
                     st.error("O campo Ativo é obrigatório.")
                 else:
-                    database.add_transacao(
+                    add_transacao(
                         data_op, ativo, tipo, qtd, preco, corretora, 
                         categoria, 
                         moeda, cotacao, obs
@@ -323,7 +327,7 @@ with tab_registrar:
         st.subheader("Remover Item")
         id_del = st.number_input("ID da Transação", min_value=0, step=1)
         if st.button("Apagar Registro"):
-            database.del_transacao(id_del)
+            del_transacao(id_del)
             st.success(f"Registro ID {id_del} removido.")
         st.divider()
 
@@ -347,7 +351,7 @@ with tab_simular:
 
     st.header("🔮 Simulador de Vendas & Lucro")
     
-    dados = database.consultar_extrato()
+    dados = consultar_extrato()
     
     if not dados:
         st.warning("Sem dados para simular.")
@@ -432,7 +436,7 @@ with tab_simular:
 with tab_rebal:
     st.header("⚖️ Rebalanceamento Automático")
     
-    dados = database.consultar_extrato()
+    dados = consultar_extrato()
     
     if not dados:
         st.warning("Cadastre operações primeiro.")
@@ -516,3 +520,72 @@ with tab_rebal:
 
                     if resultados["valor_outros"] > 0:
                         st.warning(f"⚠️ Ativos não classificados somam R$ {resultados['valor_outros']:,.2f}.")
+
+with tab_metas:
+    st.header("🎯 Painel de Metas")
+    
+    col_form, col_view = st.columns([1, 2])
+    with col_form:
+        st.subheader("Nova Meta")
+        tipo_meta = st.selectbox(
+            "Tipo de Meta",
+            ["Patrimônio Total", "Total em Categoria", "Renda Passiva (Total)"]
+        )
+        
+        filtro_input = ""
+        if tipo_meta == "Total em Categoria":
+            filtro_input = st.selectbox(
+                "Qual Categoria?", 
+                ["Renda Fixa", "Stocks", "ETF Internacional", "Criptomoedas"]
+            )
+        with st.form("form_meta"):
+            valor_alvo = st.number_input("Valor Alvo (R$)", min_value=0.0, step=1000.0)
+            descricao = st.text_input("Nome da Meta (Ex: Aposentadoria, Carro)")
+            data_limite = st.date_input("Prazo (Opcional)")
+            
+            submitted = st.form_submit_button("Salvar Meta 💾")
+            
+            if submitted:
+                if valor_alvo > 0:
+                    criar_meta(tipo_meta, filtro_input, valor_alvo, str(data_limite), descricao)
+                    st.success("Meta criada!")
+                    st.rerun()
+                else:
+                    st.error("O valor deve ser maior que zero.")
+    with col_view:
+        st.subheader("Acompanhamento")
+        metas_db = listar_metas()
+        if not metas_db:
+            st.info("Nenhuma meta cadastrada. Use o formulário ao lado.")
+        else:
+            dados_brutos = consultar_extrato()
+            if dados_brutos:
+                colunas_db = ["ID", "Data", "Ativo", "Tipo", "Qtd", "Preço", "Total", "Corretora", "Categoria", "Moeda", "Cambio", "Obs"]
+                if len(dados_brutos[0]) != 12: colunas_db = ["ID", "Data", "Ativo", "Tipo", "Qtd", "Preço", "Total", "Corretora", "Moeda", "Cambio", "Obs"]
+                df_metas = pd.DataFrame(dados_brutos, columns=colunas_db)
+                lista_progresso = calcular_progresso_metas(df_metas, metas_db)
+                
+                for item in lista_progresso:
+                    with st.container(border=True):
+                        c1, c2 = st.columns([3, 1])
+                        c1.markdown(f"### {item['titulo']}")
+                        if c2.button("🗑️", key=f"del_{item['id']}", help="Excluir Meta"):
+                            excluir_meta(item['id'])
+                            st.rerun()
+
+                        st.progress(item['pct'], text=f"{item['pct']*100:.1f}% Concluído")
+
+                        m1, m2, m3 = st.columns(3)
+                        m1.caption("Atual")
+                        m1.markdown(f"R$ {item['valor_atual']:,.2f}")
+                        
+                        m2.caption("Objetivo")
+                        m2.markdown(f"R$ {item['valor_alvo']:,.2f}")
+                        
+                        m3.caption("Falta")
+                        m3.markdown(f"**R$ {item['falta']:,.2f}**")
+                        
+                        if item['pct'] >= 1.0:
+                            st.success("🎉 PARABÉNS! META ATINGIDA!")
+            else:
+                st.warning("Cadastre transações no sistema para ver o progresso.")
