@@ -50,12 +50,12 @@ Opção 1: Usando Docker (Recomendado)
 
 Pré-requisito: Ter o Docker Desktop instalado.
 
-   Clone o repositório e entre na pasta:
-   ```bash
+Clone o repositório e entre na pasta:
+```bash
    git clone [https://github.com/r7araujo/investiment-manager.git](https://github.com/r7araujo/investiment-manager.git)
    cd investiment-manager
    docker-compose up
-   
+```
 3. Pronto! Acesse o navegador em: http://localhost:8501
 
 Opção 2: Instalação Manual (Local)
