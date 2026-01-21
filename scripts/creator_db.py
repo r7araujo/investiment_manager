@@ -1,29 +1,37 @@
-import subprocess
-import sys
+import sqlite3
 import os
 
-def run_script(script_name):
-    """
-    Executa um script Python localizado na mesma pasta que este arquivo.
-    """
-    base_path = os.path.dirname(__file__)
-    script_path = os.path.join(base_path, script_name)
+diretorio_script = os.path.dirname(os.path.abspath(__file__))
+caminho_banco = os.path.join(diretorio_script, '..', 'db', 'maindata.db')
+os.makedirs(os.path.dirname(caminho_banco), exist_ok=True)
 
-    print(f"🔄 Executando {script_name}...")
+print(f"Criando/Conectando ao banco de dados em: {caminho_banco}")
 
-    try:
-        result = subprocess.run([sys.executable, script_path], check=True, text=True)
-        print(f"✅ {script_name} concluído com sucesso!\n")
-    except subprocess.CalledProcessError as e:
-        print(f"❌ Erro ao executar {script_name}.")
-        print(f"O processo parou para evitar inconsistências.")
-        sys.exit(1)
-    except FileNotFoundError:
-        print(f"❌ Arquivo não encontrado: {script_path}")
-        sys.exit(1)
+conn = sqlite3.connect(caminho_banco)
+cursor = conn.cursor()
 
-if __name__ == "__main__":
-    print("🚀 Iniciando configuração do Banco de Dados...\n")
-    run_script("db_creator.py")
-    run_script("db_mod1.py")
-    print("🎉 Banco de dados configurado e atualizado com sucesso!")
+sql_criar_tabela = """
+CREATE TABLE IF NOT EXISTS transacoes (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    data TEXT NOT NULL,                
+    ativo TEXT NOT NULL,               
+    tipo TEXT NOT NULL,                
+    quantidade REAL,                   
+    preco_unitario REAL,               
+    valor_total REAL NOT NULL,         
+    corretora TEXT NOT NULL,           
+    moeda TEXT DEFAULT 'BRL',          
+    taxa_cambio REAL DEFAULT 1.0,      
+    observacao TEXT,
+    categoria TEXT DEFAULT 'Outros',
+    
+    CHECK(tipo IN ('Compra', 'Venda', 'Dividendo', 'JCP', 'Taxa', 'Bonificacao', 'Cambio'))
+);
+"""
+
+cursor.execute(sql_criar_tabela)
+
+conn.commit()
+conn.close()
+
+print("Sucesso! O arquivo 'maindata.db' foi criado na pasta 'db'.")
