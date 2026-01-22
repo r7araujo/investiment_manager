@@ -561,7 +561,8 @@ with tab_metas:
             dados_brutos = consultar_extrato()
             if dados_brutos:
                 colunas_db = ["ID", "Data", "Ativo", "Tipo", "Qtd", "Preço", "Total", "Corretora", "Categoria", "Moeda", "Cambio", "Obs"]
-                if len(dados_brutos[0]) != 12: colunas_db = ["ID", "Data", "Ativo", "Tipo", "Qtd", "Preço", "Total", "Corretora", "Moeda", "Cambio", "Obs"]
+                if len(dados_brutos[0]) != 12: colunas_db = ["ID", "Data", "Ativo", "Tipo", "Qtd",
+                                                              "Preço", "Total", "Corretora", "Moeda", "Cambio", "Obs"]
                 df_metas = pd.DataFrame(dados_brutos, columns=colunas_db)
                 lista_progresso = calcular_progresso_metas(df_metas, metas_db)
                 

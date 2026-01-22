@@ -4,3 +4,5 @@ datetime
 streamlit
 pandas
 plotly
+yfinance
+python-bcb

@@ -1,6 +1,6 @@
-import pandas as pd, json, os
-from datetime import datetime
-
+import pandas as pd, json, os, yfinance as yf, numpy as np
+from datetime import datetime, timedelta
+from bcb import sgs
 # Funções de cálculos primários
 
 def calcular_total_bonificacoes(df):
