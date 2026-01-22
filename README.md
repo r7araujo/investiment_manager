@@ -35,14 +35,8 @@ Uma aplicação web desenvolvida em **Python** e **Streamlit** para controle pes
 
 ## 🚀 Como Executar o Projeto
 
-### ⚠️ Configuração do Banco de Dados (Passo Obrigatório)
-**Importante:** O arquivo de banco de dados (`maindata.db`) **não está incluído no repositório** para preservar a privacidade dos dados. Antes de rodar o projeto pela primeira vez, você deve inicializá-lo:
+### ⚠️ **Importante:** O arquivo de banco de dados (`maindata.db`) **não está incluído no repositório** para preservar a privacidade dos dados. Antes de rodar o projeto pela primeira vez, você deve inicializá-lo:
 
-1. Certifique-se de estar na raiz do projeto.
-2. Execute o script de criação (ele aplica as migrações na ordem correta):
-   ```bash
-   python scripts/creator_db.py
-Isso criará o arquivo maindata.db dentro da pasta db/.
 🏃‍♂️ Iniciando a Aplicação
 
 Você pode executar o projeto de duas maneiras: usando Docker (ambiente isolado e automático) ou Manualmente (Python local).
