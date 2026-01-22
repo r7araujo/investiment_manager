@@ -250,6 +250,152 @@ def calcular_cenarios_simulacao(qtd_atual, preco_simulado, pm_atual):
     
     return pd.DataFrame(lista_cenarios)
 
+# Funções que puxam dados externos
+
+def obter_cotacao_online(lista_tickers):
+    """
+    Busca cotação online via yfinance.
+    Tenta em lote primeiro. Se falhar, tenta individualmente.
+    """
+    if not lista_tickers:
+        return {}
+    
+    # Dicionário de resultados
+    cotacoes = {}
+    
+    # 1. Tratamento inicial de tickers
+    mapa_tickers = {} # { 'BTC': 'BTC-BRL', 'PETR4': 'PETR4.SA' }
+    
+    for t in lista_tickers:
+        t_str = str(t).upper().strip()
+        t_final = t_str
+        
+        # Lógica de sufixos
+        if t_str in ["BTC", "ETH", "USDT", "BNB", "SOL", "XRP", "ADA", "DOGE", "AVAX"]:
+             t_final = f"{t_str}-BRL"
+        elif len(t_str) >= 5 and t_str[-1].isdigit() and ".SA" not in t_str:
+             t_final = f"{t_str}.SA"
+             
+        mapa_tickers[t] = t_final
+
+    lista_para_yahoo = list(mapa_tickers.values())
+    try:
+        dados = yf.download(lista_para_yahoo, period="1d", progress=False)['Close']
+        if not dados.empty:
+            if isinstance(dados, pd.Series):
+                 val = dados.iloc[-1]
+                 if not pd.isna(val):
+                     tk_unico = list(mapa_tickers.keys())[0]
+                     cotacoes[tk_unico] = float(val)
+            elif isinstance(dados, pd.DataFrame):
+                for t_orig, t_yahoo in mapa_tickers.items():
+                    if t_yahoo in dados.columns:
+                        val = dados[t_yahoo].iloc[-1]
+                        if not pd.isna(val):
+                            cotacoes[t_orig] = float(val)
+    except Exception as e:
+        st.write(f"Erro no download em lote: {e}")
+    # Fallback: Verifica quem ficou sem cotação e tenta individualmente
+    faltantes = [t for t in lista_tickers if t not in cotacoes]
+    if faltantes:
+        for t in faltantes:
+            t_yahoo = mapa_tickers[t]
+            val = _buscar_ticker_individual(t_yahoo)
+            # Se falhou e era cripto BRL, tenta USD
+            if val is None and t_yahoo.endswith("-BRL"):
+                t_usd = t_yahoo.replace("-BRL", "-USD")
+                val_usd = _buscar_ticker_individual(t_usd)
+                if val_usd is not None:
+                     # Converte para BRL (pega dolar hoje aprox ou do yahoo)
+                     dolar = _buscar_ticker_individual("BRL=X") # Yahoo: BRL=X é USD/BRL? Não, USDBRL=X
+                     if not dolar: dolar = _buscar_ticker_individual("USDBRL=X")
+                     val = val_usd * dolar
+            
+            if val is not None:
+                cotacoes[t] = val
+                
+    return cotacoes
+
+def _buscar_ticker_individual(ticker):
+    """Helper para buscar 1 ticker específico"""
+    try:
+        t = yf.Ticker(ticker)
+        hist = t.history(period="1d")
+        if not hist.empty:
+            return float(hist['Close'].iloc[-1])
+    except:
+        return None
+    return None
+
+def gerar_painel_rentabilidade(carteira, df_transacoes):
+    """
+    Monta a tabela comparando PM x Cotação Atual.
+    """
+    
+    # Filtra o que é Renda Variável para buscar cotação
+    # Precisa saber a categoria de cada ativo da carteira
+    mapa_categorias = {}
+    if not df_transacoes.empty and 'Categoria' in df_transacoes.columns:
+        df_unicos = df_transacoes[['Ativo', 'Categoria']].drop_duplicates('Ativo', keep='last')
+        mapa_categorias = dict(zip(df_unicos['Ativo'], df_unicos['Categoria']))
+    
+    ativos_rv = []
+    
+    # 2. Identifica quem é Renda Variável de fato
+    for ativo, dados in carteira.items():
+        if dados['qtd'] < 0.000001: continue
+        cat = mapa_categorias.get(ativo, "Outros")
+        classe_macro = classificar_ativo(cat)
+        if classe_macro != "Renda Fixa" and classe_macro != "Outros":
+            ativos_rv.append(ativo)
+    cotacoes = obter_cotacao_online(ativos_rv)
+    lista_rentabilidade = []
+    total_atual_carteira = 0.0
+    total_custo_carteira = 0.0
+    for ativo in ativos_rv:
+        dados = carteira[ativo]
+        qtd = dados['qtd']
+        custo_total = dados['custo_total']
+        pm = custo_total / qtd
+        
+        usou_fallback = False
+        if ativo in cotacoes:
+             cotacao_atual = cotacoes[ativo]
+        else:
+             cotacao_atual = pm 
+             usou_fallback = True
+        
+        valor_atual_ativo = qtd * cotacao_atual
+        lucro_rs = valor_atual_ativo - custo_total
+        lucro_pct = (lucro_rs / custo_total) * 100 if custo_total > 0 else 0.0
+        
+        total_atual_carteira += valor_atual_ativo
+        total_custo_carteira += custo_total
+        
+        lista_rentabilidade.append({
+            "Ativo": ativo,
+            "Qtd": qtd,
+            "PM": pm,
+            "Cotação Atual": cotacao_atual,
+            "Valor Atual": valor_atual_ativo,
+            "Lucro (R$)": lucro_rs,
+            "Var (%)": lucro_pct,
+            "Status": "⚠️ Offline" if usou_fallback else "✅ Online"
+        })
+        
+    df_rent = pd.DataFrame(lista_rentabilidade)
+    if not df_rent.empty:
+        df_rent = df_rent.sort_values(by="Var (%)", ascending=False)
+        
+    resumo_geral = {
+        "custo_total": total_custo_carteira,
+        "valor_atual": total_atual_carteira,
+        "lucro_total_rs": total_atual_carteira - total_custo_carteira,
+        "lucro_total_pct": ((total_atual_carteira - total_custo_carteira) / total_custo_carteira * 100) if total_custo_carteira > 0 else 0
+    }
+    
+    return df_rent, resumo_geral
+
 # Funções do rebalanceamento
 
 def classificar_ativo(categoria_input, *args):

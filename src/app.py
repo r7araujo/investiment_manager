@@ -1,4 +1,4 @@
-import streamlit as st, pandas as pd, plotly.express as px, plotly.graph_objects as go, time
+import streamlit as st, pandas as pd, plotly.express as px, plotly.graph_objects as go, time, yfinance as yf
 from datetime import date
 from utils import *
 from database import *
@@ -13,8 +13,8 @@ dados = consultar_extrato()
 st.set_page_config(page_title="Meus Investimentos", layout="wide")
 st.title("💰 Gerenciador de Investimentos")
 
-tab_dash, tab_extrato, tab_registrar, tab_simular, tab_rebal, tab_metas = st.tabs([
-    "📊 Dashboard", "📑 Extrato", "⚙️ Registrador", "🔮 Simular", "⚖️ Rebalanceador", "🎯 Metas"
+tab_dash, tab_extrato, tab_registrar, tab_atual, tab_rebal, tab_metas = st.tabs([
+    "📊 Dashboard", "📑 Extrato", "⚙️ Registrador", "📈 Atualidades", "⚖️ Rebalanceador", "🎯 Metas"
     ])
 
 with tab_dash:
@@ -296,6 +296,10 @@ with tab_registrar:
         st.subheader("💾 Backup e Segurança")
         arquivo_bytes = obter_arquivo_banco()
         
+        ultimo_backup = ler_config("ultimo_backup")
+        if ultimo_backup:
+            st.caption(f"📅 Último backup: **{ultimo_backup}**")
+
         if arquivo_bytes:
             st.download_button(
                 label="📥 Baixar Backup (.db)",
@@ -309,63 +313,73 @@ with tab_registrar:
         else:
             st.error("Erro: Arquivo 'maindata.db' não encontrado.")
 
-with tab_simular:
-    st.header("🔮 Simulador de Vendas & Lucro")
+with tab_atual:
+    st.header("📈 Posição Atual (Online)")
+    
     dados = consultar_extrato()
     if not dados:
-        st.warning("Sem dados para simular.")
+        st.warning("Sem dados cadastrados.")
     else:
         df = pd.DataFrame(dados, columns=COLUNAS_DB)
-        carteira_sim = calcular_carteira_atual(df) 
-        ativos_disponiveis = sorted(list(carteira_sim.keys()))
-        if not ativos_disponiveis:
-            st.info("Você não possui ativos em carteira para simular.")
+        
+        # Recalcula carteira
+        carteira_atual = calcular_carteira_atual(df)
+        
+        if not carteira_atual:
+            st.info("Carteira vazia.")
         else:
-            c1, c2, c3 = st.columns(3)
-            with c1:
-                ativo_sel = st.selectbox("Selecione o Ativo", sorted(ativos_disponiveis))
-            dados_ativo = carteira_sim[ativo_sel]
-            qtd_atual = dados_ativo['qtd']
-            custo_total = dados_ativo['custo_total']
-            pm_atual = custo_total / qtd_atual if qtd_atual > 0 else 0
-            with c2:
-                preco_simulado = st.number_input("Preço de Venda (Cotação Atual)", value=float(round(pm_atual, 2)), min_value=0.01, step=0.01)
-            with c3:
-                st.metric("Seu Preço Médio (PM)", f"R$ {pm_atual:,.2f}")
+            with st.spinner("Buscando cotações online no Yahoo Finance..."):
+                df_rentabilidade, resumo = gerar_painel_rentabilidade(carteira_atual, df)
+            
+            # --- Métricas de Cabeçalho ---
+            col_m1, col_m2, col_m3 = st.columns(3)
+            with col_m1:
+                st.metric("Patrimônio Atual (Estimado)", f"R$ {resumo['valor_atual']:,.2f}")
+            with col_m2:
+                cor_delta = "normal"
+                if resumo['lucro_total_rs'] > 0: cor_delta = "normal" # Verde padrao
+                elif resumo['lucro_total_rs'] < 0: cor_delta = "inverse" # Vermelho
+                
+                st.metric(
+                    "Lucro/Prej. Total (Não Realizado)", 
+                    f"R$ {resumo['lucro_total_rs']:,.2f}",
+                    delta=f"{resumo['lucro_total_pct']:.2f}%"
+                )
+            with col_m3:
+                st.metric("Custo de Aquisição", f"R$ {resumo['custo_total']:,.2f}")
+                
             st.divider()
-            st.subheader("Cenário vendendo 100%")
-            if qtd_atual > 0:
-                valor_venda_bruto = qtd_atual * preco_simulado
-                custo_proporcional = qtd_atual * pm_atual
-                lucro_bruto = valor_venda_bruto - custo_proporcional
-                roi_pct = (lucro_bruto / custo_proporcional) * 100 if custo_proporcional > 0 else 0
-                col_res1, col_res2, col_res3 = st.columns(3)
-                with col_res1:
-                    st.metric("Valor Total da Venda", f"R$ {valor_venda_bruto:,.2f}")
-                with col_res2:
-                    st.metric(
-                        "Lucro/Prejuízo Estimado", 
-                        f"R$ {lucro_bruto:,.2f}",
-                        delta=f"{roi_pct:.2f}%",
-                        delta_color="normal"
-                    )
-                with col_res3:
-                    st.markdown(f"""
-                    **Resumo da Operação:**
-                    - Você venderia **{qtd_atual:,.4f}** unidades.
-                    """)
-                st.markdown("### ⚡ Cenários Rápidos")
-                df_cenarios = calcular_cenarios_simulacao(qtd_atual, preco_simulado, pm_atual)
+            
+            # --- Tabela Detalhada ---
+            st.subheader("Rentabilidade por Ativo")
+            
+            if not df_rentabilidade.empty:
                 st.dataframe(
-                    df_cenarios, 
-                    hide_index=True, 
+                    df_rentabilidade,
+                    hide_index=True,
                     use_container_width=True,
                     column_config={
-                        "Receba (R$)": st.column_config.NumberColumn(format="R$ %.2f"),
-                        "Lucro (R$)": st.column_config.NumberColumn(format="R$ %.2f"),
-                        "Qtd": st.column_config.NumberColumn(format="%.4f"),
+                        "Ativo": st.column_config.TextColumn("Ativo", width="small"),
+                        "Qtd": st.column_config.NumberColumn("Qtd", format="%.4f"),
+                        "PM": st.column_config.NumberColumn("Preço Médio", format="R$ %.2f"),
+                        "Cotação Atual": st.column_config.NumberColumn("Cotação (Yahoo)", format="R$ %.2f"),
+                        "Valor Atual": st.column_config.NumberColumn("Saldo Atual", format="R$ %.2f"),
+                        "Lucro (R$)": st.column_config.NumberColumn("Lucro R$", format="R$ %.2f"),
+                        "Var (%)": st.column_config.NumberColumn(
+                            "Var %", 
+                            format="%.2f %%"
+                        ),
+                        "Status": st.column_config.TextColumn("Status", width="small")
                     }
                 )
+                
+                # Aviso se houver algum offline
+                if "⚠️ Offline" in df_rentabilidade["Status"].values:
+                    st.warning("⚠️ Alguns ativos não tiveram cotação encontrada e estão exibindo o preço de custo (PM) para não distorcer o total.")
+                
+                st.caption("*Cotações com delay de 15 min ou fechamento anterior. Fonte: Yahoo Finance.")
+            else:
+                st.info("Nenhum ativo elegível para cotação.")
 
 with tab_rebal:
         st.header("⚖️ Rebalanceamento de Carteira")
@@ -427,6 +441,29 @@ with tab_rebal:
                     use_container_width=True
                 )
                 st.divider()
+                
+                # --- Contador de Rebalanceamento ---
+                ult_rebal = ler_config("ultimo_rebalanceamento")
+                if ult_rebal:
+                    try:
+                        dt_ult = datetime.strptime(ult_rebal, "%Y-%m-%d").date()
+                        hoje = date.today()
+                        diferenca = hoje - dt_ult
+                        meses = diferenca.days // 30
+                        dias = diferenca.days % 30
+                        st.info(f"📅 Último rebalanceamento realizado há **{meses} meses e {dias} dias** ({dt_ult.strftime('%d/%m/%Y')}).")
+                    except:
+                        st.caption("Data de rebalanceamento inválida.")
+
+                c_reb1, c_reb2 = st.columns([1, 2])
+                with c_reb1:
+                    if st.button("✅ Marcar como Realizado", help="Salva a data de hoje como último rebalanceamento"):
+                        salvar_config("ultimo_rebalanceamento", str(date.today()))
+                        st.success("Data atualizada!")
+                        time.sleep(1)
+                        st.rerun()
+                # -----------------------------------
+
                 if st.button("Calcular Rebalanceamento 🚀", type="primary"):
                     res = calcular_rebalanceamento(df_final, aporte, dolar, metas_usuario, reserva_salva)
                     

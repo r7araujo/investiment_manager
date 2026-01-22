@@ -158,17 +158,9 @@ def obter_arquivo_banco():
     return None
 
 def registrar_data_backup():
-    """Salva apenas a data e hora atual no log."""
+    """Salva a data e hora do backup na tabela de config."""
     agora = datetime.now().strftime("%d/%m/%Y às %H:%M:%S")
-    dados = {"ultimo_backup": agora}
-    
-    caminho_log = obter_caminho_db('backup_log.json')
-    
-    try:
-        with open(caminho_log, 'w') as f:
-            json.dump(dados, f)
-    except Exception as e:
-        print(f"Erro ao salvar log de backup: {e}")
+    salvar_config("ultimo_backup", agora)
 
 # Funções para modificar variáveis
 
