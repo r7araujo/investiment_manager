@@ -33,6 +33,7 @@ def inicializar_tabela_transacoes():
         taxa_cambio REAL DEFAULT 1.0,
         observacao TEXT,
         categoria TEXT DEFAULT 'Outros',
+        classe TEXT,
         
         CHECK(tipo IN (
             'Compra', 'Venda', 'Dividendo', 'JCP', 'Taxa', 'Bonificacao', 'Cambio',
@@ -40,12 +41,15 @@ def inicializar_tabela_transacoes():
         ))
     );
     """
-    
+    try:
+        cursor.execute("ALTER TABLE transacoes ADD COLUMN classe TEXT")
+    except sqlite3.OperationalError:
+        pass # A coluna já existe, vida que segue.
     cursor.execute(sql_criar_tabela)
     conn.commit()
     conn.close()
 
-def add_transacao(data, ativo, tipo, quantidade, preco, corretora, categoria, moeda='BRL', cambio=1.0, obs=''):
+def add_transacao(data, ativo, tipo, quantidade, preco, corretora, categoria, classe, moeda='BRL', cambio=1.0, obs=''):
     conn = conectar()
     cursor = conn.cursor()
     
@@ -54,7 +58,7 @@ def add_transacao(data, ativo, tipo, quantidade, preco, corretora, categoria, mo
 
     sql = """
     INSERT INTO transacoes 
-    (data, ativo, tipo, quantidade, preco_unitario, valor_total, corretora, categoria, moeda, taxa_cambio, observacao)
+    (data, ativo, tipo, quantidade, preco_unitario, valor_total, corretora, categoria, classe, moeda, taxa_cambio, observacao)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     """
     valores = (data, ativo.upper(), tipo, quantidade, preco, valor_total, corretora, categoria, moeda, cambio, obs)    
@@ -103,7 +107,8 @@ def consultar_extrato():
         categoria, 
         moeda, 
         taxa_cambio, 
-        observacao
+        observacao,
+        classe
     FROM transacoes 
     ORDER BY data DESC
     """
@@ -117,6 +122,20 @@ def consultar_extrato():
         return []
     finally:
         conn.close()
+
+def identificar_classe(categoria):
+    """
+    Recebe a categoria (ex: 'Ações', 'CDB') e retorna a Classe Macro.
+    """
+    cat = str(categoria)
+
+    if cat in MAPA_CLASSES["Renda Fixa"]:
+        return "Renda Fixa"
+    
+    if cat in MAPA_CLASSES["Renda Variável"]:
+        return "Renda Variável"
+
+    return "Outros"
 
 # Funções de backup
 
@@ -179,7 +198,7 @@ def inicializar_tabela_config():
         
     conn.close()
     print("Tabela 'config' verificada com sucesso.")
-    
+
 def salvar_config(chave, valor):
     """
     Salva uma configuração. 

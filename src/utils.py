@@ -3,8 +3,6 @@ from datetime import datetime, timedelta
 from bcb import sgs
 from constants import *
 
-# Aqui estão as funções para 
-
 # Funções de cálculos primários
 
 def calcular_total_bonificacoes(df):
@@ -75,10 +73,7 @@ def calcular_resumo_ativos(df_transacoes):
     if df_transacoes.empty:
         return pd.DataFrame()
 
-    carteira = {}
-    # Estrutura: { 'PETR4': {'qtd': 100, 'custo_total': 2500} }
-
-    # Garante que está ordenado por data para o cálculo funcionar
+    carteira = {}   # Estrutura: { 'PETR4': {'qtd': 100, 'custo_total': 2500} }
     df_sorted = df_transacoes.sort_values('Data')
 
     for _, row in df_sorted.iterrows():
@@ -127,16 +122,137 @@ def calcular_resumo_ativos(df_transacoes):
         
     return df_resumo
 
-# Funções do rabalanceamento
+def calcular_evolucao_patrimonial(df_sorted, date_range):
+    """
+    Calcula a evolução patrimonial mensal.
+    Retorna eixos X (datas), Y1 (aportes mensais) e Y2 (total acumulado).
+    """
+    eixo_datas = []
+    eixo_aportes = []
+    eixo_acumulado = [] 
+    carteira_temp = {} 
 
-def classificar_ativo(categoria_input):
-    # Seu mapa de classes (Pode vir de um arquivo constants.py ou estar aqui dentro)
-    MAPA_CLASSES = {
-        "Renda Fixa": ["Tesouro Direto", "CDB", "LCI/LCA", "Debêntures", "Caixinha"],
-        "Renda Variável": ["Ações", "FIIs", "Stocks", "REITs", "ETF", "Criptomoedas", "BDR"]
-    }
+    for data_mes in date_range:
+        # Filtra transações deste mes específico
+        mask_mes = (df_sorted['Data'].dt.year == data_mes.year) & (df_sorted['Data'].dt.month == data_mes.month)
+        transacoes_mes = df_sorted[mask_mes]
+        
+        aporte_do_mes = 0.0
+        
+        # Processa cada transação do mês
+        for _, row in transacoes_mes.iterrows():
+            ativo = row['Ativo']
+            tipo = row['Tipo']
+            qtd = row['Qtd']
+            total = row['Total']
+            
+            if ativo not in carteira_temp:
+                carteira_temp[ativo] = {'qtd': 0.0, 'custo_total': 0.0}
+            
+            if tipo == 'Compra':
+                carteira_temp[ativo]['qtd'] += qtd
+                carteira_temp[ativo]['custo_total'] += total
+                aporte_do_mes += total 
+                
+            elif tipo == 'Bonificacao':
+                carteira_temp[ativo]['qtd'] += qtd
+                
+            elif tipo == 'Venda':
+                if carteira_temp[ativo]['qtd'] > 0:
+                    pm = carteira_temp[ativo]['custo_total'] / carteira_temp[ativo]['qtd']
+                    custo_da_venda = pm * qtd
+                    carteira_temp[ativo]['qtd'] -= qtd
+                    carteira_temp[ativo]['custo_total'] -= custo_da_venda
 
-    # Remove espaços extras por segurança
+            elif tipo == 'Saque':
+                if carteira_temp[ativo]['qtd'] > 0:
+                    pm = carteira_temp[ativo]['custo_total'] / carteira_temp[ativo]['qtd']
+                    custo_saque = pm * qtd
+                    carteira_temp[ativo]['qtd'] -= qtd
+                    carteira_temp[ativo]['custo_total'] -= custo_saque
+
+        total_investido_mes = sum(item['custo_total'] for item in carteira_temp.values())
+        
+        # Salva nas listas para o gráfico after month processing
+        eixo_datas.append(data_mes)
+        eixo_aportes.append(aporte_do_mes)
+        eixo_acumulado.append(total_investido_mes)
+        
+    return eixo_datas, eixo_aportes, eixo_acumulado
+
+def calcular_alocacao_por_classe(df):
+    """
+    Agrupa o total investido por Classe de Ativo (Renda Fixa x Variavel).
+    Retorna DataFrame pronto para o gráfico de Pizza.
+    """
+    df_temp = df.copy()
+    df_temp['Classe_Ativo'] = df_temp['Categoria'].apply(
+        lambda x: 'Renda Fixa' if x in MAPA_CLASSES['Renda Fixa'] else 'Renda Variável'
+    )
+    
+    # Filtra apenas Compras para ver proporção de entrada (ou poderia ser saldo atual,
+    # mas mantendo a lógica original do app.py que filtrava 'Compra')
+    df_ativos = df_temp[df_temp['Tipo'] == 'Compra']
+    
+    return df_ativos.groupby('Classe_Ativo')['Total'].sum().reset_index()
+
+def gerar_tabela_alocacao(carteira, df_transacoes):
+    """
+    Gera a tabela de alocação detalhada por ativo e suas categorias.
+    """
+    lista_posicao = []
+    
+    # Cache simples de categorias para não buscar no DF a cada iteração de forma lenta
+    # Cria um dict: { 'PETR4': 'Ações', 'TESOURO': 'Renda Fixa' ... }
+    # Pega o último registro de categoria válido para cada ativo
+    mapa_categorias = {}
+    if not df_transacoes.empty and 'Categoria' in df_transacoes.columns:
+        df_unicos = df_transacoes[['Ativo', 'Categoria']].drop_duplicates('Ativo', keep='last')
+        mapa_categorias = dict(zip(df_unicos['Ativo'], df_unicos['Categoria']))
+
+    for ativo, dados_ativo in carteira.items():
+        if dados_ativo['custo_total'] > 0.01:
+            cat_original = mapa_categorias.get(ativo, "Outros")
+            classe = classificar_ativo(cat_original) # Usa a função já existente
+            
+            # Ajuste fino: Se a função retornar o próprio nome (Ex: Ações), converte para Macro
+            if classe not in ['Renda Fixa', 'Renda Variável']:
+                 # Se não é Renda Fixa, assume Variável para o gráfico macro
+                 classe = 'Renda Variável' if cat_original not in MAPA_CLASSES['Renda Fixa'] else 'Renda Fixa'
+
+            lista_posicao.append({
+                'Ativo': ativo,
+                'Categoria': cat_original,
+                'Classe': classe,
+                'Total Investido': dados_ativo['custo_total']
+            })
+    
+    return pd.DataFrame(lista_posicao)
+
+def calcular_cenarios_simulacao(qtd_atual, preco_simulado, pm_atual):
+    """
+    Gera cenários de venda parcial (25%, 50%, 75%, 100%).
+    """
+    cenarios = [0.25, 0.50, 0.75, 1.0]
+    lista_cenarios = []
+    
+    for p in cenarios:
+        q = qtd_atual * p
+        v = q * preco_simulado
+        c = q * pm_atual
+        l = v - c
+        lista_cenarios.append({
+            "Cenário": f"Vender {int(p*100)}%",
+            "Qtd": q,
+            "Receba (R$)": v,
+            "Lucro (R$)": l
+        })
+    
+    return pd.DataFrame(lista_cenarios)
+
+# Funções do rebalanceamento
+
+def classificar_ativo(categoria_input, *args):
     cat = str(categoria_input).strip()
 
     # 1. Se for Renda Fixa -> Retorna "Renda Fixa"
@@ -147,7 +263,7 @@ def classificar_ativo(categoria_input):
     if cat in MAPA_CLASSES["Renda Variável"]:
         return cat
 
-    # Caso não encontre (Segurança)
+    # Caso não encontre
     return "Outros"
 
 def preparar_dados_editor(df_completo):
@@ -169,8 +285,8 @@ def preparar_dados_editor(df_completo):
         macro_cat = classificar_ativo(cat_original)
         
         # Regra do Dólar (Ajuste se BDR ou ETF forem em Reais na sua visão)
-        # Assumindo que Stocks, REITs e Cripto são dolarizados/precisam de conversão visual
-        cats_dolar = ["Stocks", "REITs", "Criptomoedas", "ETF"] 
+        # Assumindo que Stocks, REITs e ETF são dolarizados/precisam de conversão visual
+        cats_dolar = ["Stocks", "REITs", "ETF"] 
         is_usd = macro_cat in cats_dolar
         
         lista_ativos.append({
@@ -182,6 +298,20 @@ def preparar_dados_editor(df_completo):
         })
     
     return pd.DataFrame(lista_ativos).sort_values(by="Classificação")
+
+def unificar_dados_com_categorias(df_carteira, df_raw):
+    """
+    Cruza o resumo da carteira com as categorias vindas do extrato.
+    """
+    # Recupera a categoria EXATA do banco (sem normalização)
+    # Pega a última categoria registrada para o ativo
+    tab_cat = df_raw[['Ativo', 'Categoria']].drop_duplicates('Ativo', keep='last')
+    
+    # Cruza: Tabela de Quantidades + Tabela de Categorias
+    df_completo = df_carteira.merge(tab_cat, on='Ativo', how='left')
+    df_completo['Categoria'] = df_completo['Categoria'].fillna("Outros")
+    
+    return df_completo
 
 def calcular_rebalanceamento(df_editado, aporte, cotacao_dolar, metas_usuario, valor_reserva=0.0):
     """
@@ -254,6 +384,7 @@ def calcular_rebalanceamento(df_editado, aporte, cotacao_dolar, metas_usuario, v
         "patrimonio_atual": patrimonio_atual,
         "patrimonio_final": patrimonio_final
     }
+
 # Funções de meta
 
 def calcular_progresso_metas(df_transacoes, lista_metas):

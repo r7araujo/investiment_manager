@@ -10,7 +10,7 @@ METAS_PADRAO = {
 
 # Colunas do maindata.db > transacoes
 COLUNAS_DB = ["ID", "Data", "Ativo", "Tipo", "Qtd", "Preço", "Total", 
-    "Corretora", "Moeda", "Cambio", "Obs", "Categoria" ]
+    "Corretora", "Categoria", "Moeda", "Cambio", "Obs", "Classe"]
 
 # Mapeamento de Macro-Classes para Categorias Específicas
 MAPA_CLASSES = {

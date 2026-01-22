@@ -45,10 +45,7 @@ with tab_dash:
     with col_graf1:
         st.subheader("Alocação por Classe")
         
-        df['Classe_Ativo'] = df['Categoria'].apply(lambda x: 'Renda Fixa' if x in MAPA_CLASSES['Renda Fixa'] else 'Renda Variável')
-        
-        df_ativos = df[df['Tipo'] == 'Compra']
-        df_pizza = df_ativos.groupby('Classe_Ativo')['Total'].sum().reset_index()
+        df_pizza = calcular_alocacao_por_classe(df)
         
         if not df_pizza.empty:
             fig_pizza = px.pie(
@@ -67,70 +64,18 @@ with tab_dash:
             st.subheader("Evolução Patrimonial")
             
             if not df.empty:
-                # 1. Conversão de Data (Garante que funciona)
                 df['Data'] = pd.to_datetime(df['Data'])
                 df_sorted = df.sort_values('Data')
                 
-                # 2. Define o período do gráfico
                 data_inicio = df_sorted['Data'].min().replace(day=1)
-                data_hoje = pd.Timestamp.now().replace(day=1)
-                
-                # Garante pelo menos 12 meses de visão
-                data_futura_minima = data_inicio + pd.DateOffset(months=12)
+                data_hoje = pd.Timestamp.now().replace(day=1)                
+                data_futura_minima = data_inicio + pd.DateOffset(months=12) # Garante pelo menos 12 meses de visão
                 data_fim = max(data_hoje, data_futura_minima)
                 
                 date_range = pd.date_range(start=data_inicio, end=data_fim, freq='MS')
                 
-                # Listas para o grafico
-                eixo_datas = []
-                eixo_aportes = []
-                eixo_acumulado = [] 
-                carteira_temp = {} 
-                for data_mes in date_range:
-                    # Filtra transações deste mes específico
-                    mask_mes = (df_sorted['Data'].dt.year == data_mes.year) & (df_sorted['Data'].dt.month == data_mes.month)
-                    transacoes_mes = df_sorted[mask_mes]
-                    
-                    aporte_do_mes = 0.0
-                    
-                    # Processa cada transação do mês
-                    for _, row in transacoes_mes.iterrows():
-                        ativo = row['Ativo']
-                        tipo = row['Tipo']
-                        qtd = row['Qtd']
-                        total = row['Total']
-                        
-                        if ativo not in carteira_temp:
-                            carteira_temp[ativo] = {'qtd': 0.0, 'custo_total': 0.0}
-                        
-                        if tipo == 'Compra':
-                            carteira_temp[ativo]['qtd'] += qtd
-                            carteira_temp[ativo]['custo_total'] += total
-                            aporte_do_mes += total 
-                            
-                        elif tipo == 'Bonificacao':
-                            carteira_temp[ativo]['qtd'] += qtd
-                            
-                        elif tipo == 'Venda':
-                            if carteira_temp[ativo]['qtd'] > 0:
-                                pm = carteira_temp[ativo]['custo_total'] / carteira_temp[ativo]['qtd']
-                                custo_da_venda = pm * qtd
-                                carteira_temp[ativo]['qtd'] -= qtd
-                                carteira_temp[ativo]['custo_total'] -= custo_da_venda
-
-                        elif tipo == 'Saque':
-                            if carteira_temp[ativo]['qtd'] > 0:
-                                pm = carteira_temp[ativo]['custo_total'] / carteira_temp[ativo]['qtd']
-                                custo_saque = pm * qtd
-                                carteira_temp[ativo]['qtd'] -= qtd
-                                carteira_temp[ativo]['custo_total'] -= custo_saque
-
-                    total_investido_mes = sum(item['custo_total'] for item in carteira_temp.values())
-                    
-                    # Salva nas listas para o gráfico
-                    eixo_datas.append(data_mes)
-                    eixo_aportes.append(aporte_do_mes)
-                    eixo_acumulado.append(total_investido_mes)
+                # Listas para o gráfico
+                eixo_datas, eixo_aportes, eixo_acumulado = calcular_evolucao_patrimonial(df_sorted, date_range)
 
                 fig_evolucao = go.Figure()
                 
@@ -160,20 +105,7 @@ with tab_dash:
             else:
                 st.info("Sem dados para gerar gráfico de evolução.")
     st.divider()
-    lista_posicao = []
-    for ativo, dados_ativo in carteira.items():
-        if dados_ativo['custo_total'] > 0.01:
-            cat_original = df[df['Ativo'] == ativo]['Categoria'].iloc[0] if 'Categoria' in df.columns else "Outros"
-            classe = 'Renda Fixa' if cat_original in MAPA_CLASSES['Renda Fixa'] else 'Renda Variável'
-            
-            lista_posicao.append({
-                'Ativo': ativo,
-                'Categoria': cat_original,
-                'Classe': classe,
-                'Total Investido': dados_ativo['custo_total']
-            })
-    
-    df_posicao = pd.DataFrame(lista_posicao)
+    df_posicao = gerar_tabela_alocacao(carteira, df)
     
     if not df_posicao.empty:
         col_grafico, col_detalhes = st.columns([1.5, 1])
@@ -233,28 +165,24 @@ with tab_dash:
 with tab_extrato:
     st.subheader("🧾 Mini Extrato - Posição Atual")
     if dados:
-        colunas_db = ["ID", "Data", "Ativo", "Tipo", "Qtd", "Preço", "Total", "Corretora", "Categoria", "Moeda", "Cambio", "Obs"]
-        if len(dados[0]) == len(colunas_db):
-            df_transacoes = pd.DataFrame(dados, columns=colunas_db)
-            
-            # 2. Calcula o resumo
+        if len(dados[0]) == len(COLUNAS_DB):
+            df_transacoes = pd.DataFrame(dados, columns=COLUNAS_DB)
             df_mini_extrato = calcular_resumo_ativos(df_transacoes)
             
             if not df_mini_extrato.empty:
-                # 3. Exibe a tabela bonitona
                 st.dataframe(
                     df_mini_extrato,
-                    use_container_width=True, # Ocupa a largura toda
-                    hide_index=True,          # Esconde a coluna de índice 0,1,2...
+                    use_container_width=True,
+                    hide_index=True,
                     column_config={
                         "Ativo": st.column_config.TextColumn("Ativo", width="small"),
                         "Quantidade": st.column_config.NumberColumn(
                             "Qtd", 
-                            format="%.4f" # 4 casas decimais (bom para cripto)
+                            format="%.4f"
                         ),
                         "Preço Médio": st.column_config.NumberColumn(
                             "Preço Médio",
-                            format="R$ %.2f" # Formata dinheiro
+                            format="R$ %.2f"
                         ),
                         "Total Investido": st.column_config.NumberColumn(
                             "Total Investido",
@@ -262,11 +190,8 @@ with tab_extrato:
                         )
                     }
                 )
-                
-                # (Opcional) Mostra o total geral embaixo
                 total_geral = df_mini_extrato["Total Investido"].sum()
                 st.caption(f"**Patrimônio Total (Custo):** R$ {total_geral:,.2f}")
-                
             else:
                 st.info("Você não possui ativos em carteira no momento.")
         else:
@@ -288,35 +213,31 @@ with tab_extrato:
     dados = consultar_extrato()
     
     if dados:
-        qtd_cols = len(dados[0])
-        if qtd_cols == 12:
-            colunas_db = ["ID", "Data", "Ativo", "Tipo", "Qtd", "Preço", "Total", "Corretora", "Categoria", "Moeda", "Cambio", "Obs"]
-        else:
-            colunas_db = ["ID", "Data", "Ativo", "Tipo", "Qtd", "Preço", "Total", "Corretora", "Moeda", "Cambio", "Obs"]
-        
-        df = pd.DataFrame(dados, columns=colunas_db)
+        df = pd.DataFrame(dados, columns=COLUNAS_DB)
         df['Data'] = pd.to_datetime(df['Data']).dt.date
-        
         mask_data = (df['Data'] >= data_inicial) & (df['Data'] <= data_final)
         mask_tipo = df['Tipo'].isin(tipos_selecionados)
         df_filtrado = df.loc[mask_data & mask_tipo]
-        cols_visuais = ["ID", "Data", "Ativo", "Tipo", "Qtd", "Preço", "Total", "Corretora", "Moeda", "Cambio", "Obs"]
-        if "Categoria" in df_filtrado.columns:
-            cols_visuais.insert(3, "Categoria")
-            
+        df_filtrado = df_filtrado.sort_values(by="Data", ascending=False)
+        cols_visuais = ["Data", "Ativo", "Tipo", "Categoria", "Classe", "Qtd", "Preço", "Total", "Corretora", "Obs"]
         st.dataframe(
             df_filtrado[cols_visuais], 
             hide_index=True, 
             use_container_width=True,
             column_config={
-                "Preço": st.column_config.NumberColumn(format="%.2f"),
-                "Total": st.column_config.NumberColumn(format="%.2f"),
-                "Cambio": st.column_config.NumberColumn(format="%.2f"),
-                "Qtd": st.column_config.NumberColumn(format="%.8f"),
+                "Data": st.column_config.DateColumn("Data", format="DD/MM/YYYY"),
+                "Preço": st.column_config.NumberColumn("Preço", format="R$ %.2f"),
+                "Total": st.column_config.NumberColumn("Total", format="R$ %.2f"),
+                "Qtd": st.column_config.NumberColumn("Qtd", format="%.4f"),
+                "Classe": st.column_config.TextColumn(
+                    "Classe", 
+                    help="Macro-categoria (Renda Fixa/Variável)",
+                    validate="^(Renda Fixa|Renda Variável)$" 
+                ),
             }
         )
     else:
-        st.warning("Nenhum dado encontrado.")
+        st.info("Nenhuma transação encontrada.")
 
 with tab_registrar:
     st.header("Controle de Registros")
@@ -356,9 +277,10 @@ with tab_registrar:
                 if not ativo:
                     st.error("O campo Ativo é obrigatório.")
                 else:
+                    classe_definida = identificar_classe(categoria)
                     add_transacao(
                         data_op, ativo, tipo, qtd, preco, corretora, 
-                        categoria, 
+                        categoria, classe_definida, 
                         moeda, cotacao, obs
                     )
                     st.success("Registro salvo com sucesso!")
@@ -388,20 +310,14 @@ with tab_registrar:
             st.error("Erro: Arquivo 'maindata.db' não encontrado.")
 
 with tab_simular:
-
     st.header("🔮 Simulador de Vendas & Lucro")
-    
     dados = consultar_extrato()
-    
     if not dados:
         st.warning("Sem dados para simular.")
     else:
-        colunas_db = ["ID", "Data", "Ativo", "Tipo", "Qtd", "Preço", "Total", "Corretora", "Categoria", "Moeda", "Cambio", "Obs"]
-        if len(dados[0]) != 12: colunas_db = ["ID", "Data", "Ativo", "Tipo", "Qtd", "Preço", "Total", "Corretora", "Moeda", "Cambio", "Obs"]
-        df = pd.DataFrame(dados, columns=colunas_db)
+        df = pd.DataFrame(dados, columns=COLUNAS_DB)
         carteira_sim = calcular_carteira_atual(df) 
         ativos_disponiveis = sorted(list(carteira_sim.keys()))
-        
         if not ativos_disponiveis:
             st.info("Você não possui ativos em carteira para simular.")
         else:
@@ -412,26 +328,20 @@ with tab_simular:
             qtd_atual = dados_ativo['qtd']
             custo_total = dados_ativo['custo_total']
             pm_atual = custo_total / qtd_atual if qtd_atual > 0 else 0
-            
             with c2:
                 preco_simulado = st.number_input("Preço de Venda (Cotação Atual)", value=float(round(pm_atual, 2)), min_value=0.01, step=0.01)
-            
             with c3:
                 st.metric("Seu Preço Médio (PM)", f"R$ {pm_atual:,.2f}")
-
             st.divider()
             st.subheader("Cenário vendendo 100%")
-            
             if qtd_atual > 0:
                 valor_venda_bruto = qtd_atual * preco_simulado
                 custo_proporcional = qtd_atual * pm_atual
                 lucro_bruto = valor_venda_bruto - custo_proporcional
                 roi_pct = (lucro_bruto / custo_proporcional) * 100 if custo_proporcional > 0 else 0
                 col_res1, col_res2, col_res3 = st.columns(3)
-                
                 with col_res1:
                     st.metric("Valor Total da Venda", f"R$ {valor_venda_bruto:,.2f}")
-                
                 with col_res2:
                     st.metric(
                         "Lucro/Prejuízo Estimado", 
@@ -439,29 +349,13 @@ with tab_simular:
                         delta=f"{roi_pct:.2f}%",
                         delta_color="normal"
                     )
-                
                 with col_res3:
                     st.markdown(f"""
                     **Resumo da Operação:**
                     - Você venderia **{qtd_atual:,.4f}** unidades.
                     """)
                 st.markdown("### ⚡ Cenários Rápidos")
-                cenarios = [0.25, 0.50, 0.75, 1.0]
-                lista_cenarios = []
-                
-                for p in cenarios:
-                    q = qtd_atual * p
-                    v = q * preco_simulado
-                    c = q * pm_atual
-                    l = v - c
-                    lista_cenarios.append({
-                        "Cenário": f"Vender {int(p*100)}%",
-                        "Qtd": q,
-                        "Receba (R$)": v,
-                        "Lucro (R$)": l
-                    })
-                
-                df_cenarios = pd.DataFrame(lista_cenarios)
+                df_cenarios = calcular_cenarios_simulacao(qtd_atual, preco_simulado, pm_atual)
                 st.dataframe(
                     df_cenarios, 
                     hide_index=True, 
@@ -475,15 +369,12 @@ with tab_simular:
 
 with tab_rebal:
         st.header("⚖️ Rebalanceamento de Carteira")
-
-        # 1. CONFIGURAÇÕES
         metas_usuario = ler_config("meta_alocacao")
         reserva_salva = float(ler_config("reserva_emergencia", 0.0))
 
         if not metas_usuario: 
             st.error("Erro: Metas não encontradas.")
             st.stop()
-
         with st.expander("⚙️ Configurar Metas e Reserva", expanded=False):
             with st.form("form_metas"):
                 st.markdown("### 🛡️ Reserva de Emergência")
@@ -508,12 +399,12 @@ with tab_rebal:
 
         st.divider()
 
-        # 2. INPUTS INICIAIS
+        # Inputs iniciais
         c1, c2 = st.columns(2)
         aporte = c1.number_input("Aporte (R$)", 0.0, step=100.0)
         dolar = c2.number_input("Dólar (R$)", 5.50, step=0.01)
 
-        # 3. PROCESSAMENTO DE DADOS
+        # Processamento de dados
         dados = consultar_extrato()
         
         if dados:
@@ -521,19 +412,8 @@ with tab_rebal:
             df_carteira = calcular_resumo_ativos(df_raw)
             
             if not df_carteira.empty:
-                # --- LÓGICA DE JUNÇÃO (MERGE) ---
-                # Recupera a categoria EXATA do banco (sem normalização)
-                # Pega a última categoria registrada para o ativo
-                tab_cat = df_raw[['Ativo', 'Categoria']].drop_duplicates('Ativo', keep='last')
-                
-                # Cruza: Tabela de Quantidades + Tabela de Categorias
-                df_completo = df_carteira.merge(tab_cat, on='Ativo', how='left')
-                df_completo['Categoria'] = df_completo['Categoria'].fillna("Outros")
-
-                # Prepara visualização
+                df_completo = unificar_dados_com_categorias(df_carteira, df_raw)
                 df_editado = preparar_dados_editor(df_completo)
-
-                # --- EDITOR VISUAL ---
                 st.markdown("### 1. Preencha os Preços")
                 df_final = st.data_editor(
                     df_editado,
@@ -541,13 +421,11 @@ with tab_rebal:
                         "Preço Hoje": st.column_config.NumberColumn("Preço (R$)", format="R$ %.2f", required=True),
                         "Qtd Atual": st.column_config.NumberColumn(disabled=True),
                         "Classificação": st.column_config.TextColumn(disabled=True),
-                        "Em Dólar?": st.column_config.CheckboxColumn(disabled=True)
+                        "Em Dólar?": st.column_config.CheckboxColumn(disabled=False)
                     },
                     hide_index=True,
                     use_container_width=True
                 )
-
-                # 4. CÁLCULO FINAL
                 st.divider()
                 if st.button("Calcular Rebalanceamento 🚀", type="primary"):
                     res = calcular_rebalanceamento(df_final, aporte, dolar, metas_usuario, reserva_salva)
@@ -614,10 +492,7 @@ with tab_metas:
         else:
             dados_brutos = consultar_extrato()
             if dados_brutos:
-                colunas_db = ["ID", "Data", "Ativo", "Tipo", "Qtd", "Preço", "Total", "Corretora", "Categoria", "Moeda", "Cambio", "Obs"]
-                if len(dados_brutos[0]) != 12: colunas_db = ["ID", "Data", "Ativo", "Tipo", "Qtd",
-                                                              "Preço", "Total", "Corretora", "Moeda", "Cambio", "Obs"]
-                df_metas = pd.DataFrame(dados_brutos, columns=colunas_db)
+                df_metas = pd.DataFrame(dados_brutos, columns=COLUNAS_DB)
                 lista_progresso = calcular_progresso_metas(df_metas, metas_db)
                 
                 for item in lista_progresso:
