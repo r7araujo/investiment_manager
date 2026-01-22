@@ -1,14 +1,15 @@
-import streamlit as st, pandas as pd, plotly.express as px, plotly.graph_objects as go
+import streamlit as st, pandas as pd, plotly.express as px, plotly.graph_objects as go, time
 from datetime import date
 from utils import *
 from database import *
+from constants import *
+# Cria os bancos de dados no maindata.db e consultando os dados
+inicializar_tabela_transacoes()
+inicializar_tabela_config()
 inicializar_tabela_metas()
-MAPA_CLASSES = {
-    "Renda Fixa": ["Tesouro Direto", "CDB", "LCI/LCA", "Debêntures", "Caixinha"],
-    "Renda Variável": ["Ações", "FIIs", "Stocks", "REITs", "ETF", "Criptomoedas", "BDR"]
-}
-LISTA_CATEGORIAS = [item for sublist in MAPA_CLASSES.values() for item in sublist] + ["Outros"]
+dados = consultar_extrato()
 
+# Inicio do streamlit
 st.set_page_config(page_title="Meus Investimentos", layout="wide")
 st.title("💰 Gerenciador de Investimentos")
 
@@ -16,17 +17,12 @@ tab_dash, tab_extrato, tab_registrar, tab_simular, tab_rebal, tab_metas = st.tab
     "📊 Dashboard", "📑 Extrato", "⚙️ Registrador", "🔮 Simular", "⚖️ Rebalanceador", "🎯 Metas"
     ])
 
-
 with tab_dash:
-    st.header("Visão Geral & Performance")
-    dados = consultar_extrato()
-    
+    st.header("Visão Geral & Performance")    
     if not dados:
-        st.info("Cadastre operações na aba 'Gerenciar' para ver os indicadores.")
+        st.info("Cadastre operações na aba 'Registrador' para ver os indicadores.")
     else:
-        colunas_db = ["ID", "Data", "Ativo", "Tipo", "Qtd", "Preço", "Total", "Corretora", "Categoria", "Moeda", "Cambio", "Obs"]
-        if len(dados[0]) != 12: colunas_db = ["ID", "Data", "Ativo", "Tipo", "Qtd", "Preço", "Total", "Corretora", "Moeda", "Cambio", "Obs"]
-        df = pd.DataFrame(dados, columns=colunas_db)
+        df = pd.DataFrame(dados, columns=COLUNAS_DB)
         df['Data'] = pd.to_datetime(df['Data'])
         carteira = calcular_carteira_atual(df)
         lucro_realizado = calcular_lucro_realizado(df)
@@ -335,7 +331,8 @@ with tab_registrar:
             with c1:
                 ativo = st.text_input("Ativo").upper()
             with c2:
-                tipo = st.selectbox("Tipo", ["Compra", "Venda", "Saque", "Dividendo", "JCP", "Taxa", "Cambio", "Bonificacao"])
+                tipo = st.selectbox("Tipo", ['Compra', 'Venda', 'Dividendo', 'JCP', 'Taxa', 'Bonificacao', 'Cambio',
+            'Aporte', 'Resgate', 'Reinvestimento'])
             
             col_cat1, col_cat2 = st.columns(2)
             with col_cat1:
@@ -477,92 +474,106 @@ with tab_simular:
                 )
 
 with tab_rebal:
-    st.header("⚖️ Rebalanceamento Automático")
-    
-    dados = consultar_extrato()
-    
-    if not dados:
-        st.warning("Cadastre operações primeiro.")
-    else:
-        colunas_db = ["ID", "Data", "Ativo", "Tipo", "Qtd", "Preço", "Total", "Corretora", "Categoria", "Moeda", "Cambio", "Obs"]
-        if len(dados[0]) != 12: colunas_db = ["ID", "Data", "Ativo", "Tipo", "Qtd", "Preço", "Total", "Corretora", "Moeda", "Cambio", "Obs"]
-        df_raw = pd.DataFrame(dados, columns=colunas_db)
+        st.header("⚖️ Rebalanceamento de Carteira")
+
+        # 1. CONFIGURAÇÕES
+        metas_usuario = ler_config("meta_alocacao")
+        reserva_salva = float(ler_config("reserva_emergencia", 0.0))
+
+        if not metas_usuario: 
+            st.error("Erro: Metas não encontradas.")
+            st.stop()
+
+        with st.expander("⚙️ Configurar Metas e Reserva", expanded=False):
+            with st.form("form_metas"):
+                st.markdown("### 🛡️ Reserva de Emergência")
+                nova_reserva = st.number_input("Valor da Reserva (R$)", min_value=0.0, value=reserva_salva, step=100.0, format="%.2f")
+                
+                st.divider()
+                st.markdown("### 🎯 Metas de Alocação (%)")
+                novas_metas = {}
+                cols = st.columns(3)
+                for i, (cat, val) in enumerate(metas_usuario.items()):
+                    novas_metas[cat] = cols[i%3].number_input(f"% {cat}", 0.0, 100.0, float(val), 1.0)
+                
+                if st.form_submit_button("Salvar 💾"):
+                    if abs(sum(novas_metas.values()) - 100.0) > 0.1:
+                        st.error("A soma deve ser 100%.")
+                    else:
+                        salvar_config("meta_alocacao", novas_metas)
+                        salvar_config("reserva_emergencia", nova_reserva)
+                        st.success("Salvo!")
+                        time.sleep(1)
+                        st.rerun()
+
+        st.divider()
+
+        # 2. INPUTS INICIAIS
+        c1, c2 = st.columns(2)
+        aporte = c1.number_input("Aporte (R$)", 0.0, step=100.0)
+        dolar = c2.number_input("Dólar (R$)", 5.50, step=0.01)
+
+        # 3. PROCESSAMENTO DE DADOS
+        dados = consultar_extrato()
         
-        carteira_atual = calcular_carteira_atual(df_raw)
-        
-        if not carteira_atual:
-            st.info("Carteira zerada.")
+        if dados:
+            df_raw = pd.DataFrame(dados, columns=COLUNAS_DB)
+            df_carteira = calcular_resumo_ativos(df_raw)
+            
+            if not df_carteira.empty:
+                # --- LÓGICA DE JUNÇÃO (MERGE) ---
+                # Recupera a categoria EXATA do banco (sem normalização)
+                # Pega a última categoria registrada para o ativo
+                tab_cat = df_raw[['Ativo', 'Categoria']].drop_duplicates('Ativo', keep='last')
+                
+                # Cruza: Tabela de Quantidades + Tabela de Categorias
+                df_completo = df_carteira.merge(tab_cat, on='Ativo', how='left')
+                df_completo['Categoria'] = df_completo['Categoria'].fillna("Outros")
+
+                # Prepara visualização
+                df_editado = preparar_dados_editor(df_completo)
+
+                # --- EDITOR VISUAL ---
+                st.markdown("### 1. Preencha os Preços")
+                df_final = st.data_editor(
+                    df_editado,
+                    column_config={
+                        "Preço Hoje": st.column_config.NumberColumn("Preço (R$)", format="R$ %.2f", required=True),
+                        "Qtd Atual": st.column_config.NumberColumn(disabled=True),
+                        "Classificação": st.column_config.TextColumn(disabled=True),
+                        "Em Dólar?": st.column_config.CheckboxColumn(disabled=True)
+                    },
+                    hide_index=True,
+                    use_container_width=True
+                )
+
+                # 4. CÁLCULO FINAL
+                st.divider()
+                if st.button("Calcular Rebalanceamento 🚀", type="primary"):
+                    res = calcular_rebalanceamento(df_final, aporte, dolar, metas_usuario, reserva_salva)
+                    
+                    st.subheader("🛒 Compras Indicadas")
+                    if not res['df_compras'].empty:
+                        st.dataframe(
+                            res['df_compras'][["Categoria", "Diferença (R$)", "Saldo Atual (R$)", "Meta (R$)"]],
+                            use_container_width=True, hide_index=True,
+                            column_config={"Diferença (R$)": st.column_config.NumberColumn("Falta Comprar", format="R$ %.2f")}
+                        )
+                    else:
+                        st.success("Nada a comprar por enquanto.")
+                    
+                    if not res['df_vendas'].empty:
+                        with st.expander("⚠️ Vendas Indicadas"):
+                            st.dataframe(res['df_vendas'][["Categoria", "Diferença (R$)"]], use_container_width=True)
+
+                    st.markdown("---")
+                    with st.expander("📊 Detalhes do Cálculo"):
+                        st.dataframe(res['df_comparacao'], use_container_width=True, hide_index=True)
+                        st.info(f"Patrimônio (Sem Reserva): R$ {res['patrimonio_atual']:,.2f}")
+            else:
+                st.info("Carteira vazia.")
         else:
-            st.markdown("### 1️⃣ Parâmetros")
-            c1, c2 = st.columns(2)
-            with c1:
-                cotacao_dolar = st.number_input("🇺🇸 Dólar Hoje (R$)", value=5.00, step=0.01, format="%.2f")
-            with c2:
-                aporte = st.number_input("💰 Aporte Novo (R$)", min_value=0.0, step=100.0)
-
-            st.divider()
-            st.markdown("### 2️⃣ Atualize os Preços")
-            
-            df_editor = preparar_dados_editor(carteira_atual, df_raw)
-            
-            df_editado = st.data_editor(
-                df_editor,
-                column_config={
-                    "Ativo": st.column_config.TextColumn(disabled=True),
-                    "Classificação": st.column_config.TextColumn(disabled=True),
-                    "Qtd Atual": st.column_config.NumberColumn(disabled=True, format="%.4f"),
-                    "Preço Hoje": st.column_config.NumberColumn(min_value=0.0, step=0.01, required=True, format="%.2f"),
-                    "Em Dólar?": st.column_config.CheckboxColumn(help="Marque se o preço é em US$.")
-                },
-                hide_index=True,
-                use_container_width=True,
-                key="editor_rebal_clean"
-            )
-            
-            if st.button("🔄 Calcular Rebalanceamento", type="primary"):
-                if df_editado["Preço Hoje"].min() <= 0:
-                    st.error("⚠️ Preencha todos os preços.")
-                else:
-                    resultados = calcular_rebalanceamento(df_editado, aporte, cotacao_dolar)            
-                    st.divider()
-                    st.subheader("📊 Diagnóstico (Em Reais)")
-                    
-                    col_metrics = st.columns(4)
-                    df_comp = resultados["df_comparacao"]
-                    
-                    for index, row in df_comp.iterrows():
-                        with col_metrics[index]:
-                            st.metric(
-                                label=row["Categoria"],
-                                value=f"{row['Pct Atual']*100:.1f}%",
-                                delta=f"Meta: {row['Meta Pct']*100:.0f}%",
-                                delta_color="off"
-                            )
-                    
-                    st.divider()
-                    st.subheader("🎯 Plano de Ação")
-                    
-                    c1, c2 = st.columns(2)
-                    with c1:
-                        compras = resultados["df_compras"]
-                        if not compras.empty:
-                            st.success("### ✅ Comprar")
-                            st.table(compras[["Categoria", "Diferença (R$)"]].style.format({"Diferença (R$)": "R$ {:,.2f}"}))
-                        else:
-                            st.info("Nada para comprar.")
-                            
-                    with c2:
-                        vendas = resultados["df_vendas"]
-                        if not vendas.empty:
-                            st.error("### 🔻 Vender")
-                            vendas_view = vendas.copy()
-                            vendas_view["Diferença (R$)"] = vendas_view["Diferença (R$)"].abs()
-                            st.table(vendas_view[["Categoria", "Diferença (R$)"]].style.format({"Diferença (R$)": "R$ {:,.2f}"}))
-                        else:
-                            st.success("Nada para vender.")
-
-                    if resultados["valor_outros"] > 0:
-                        st.warning(f"⚠️ Ativos não classificados somam R$ {resultados['valor_outros']:,.2f}.")
+            st.warning("Sem dados no banco.")
 
 with tab_metas:
     st.header("🎯 Painel de Metas")
