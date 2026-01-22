@@ -235,6 +235,49 @@ with tab_dash:
             )
 
 with tab_extrato:
+    st.subheader("🧾 Mini Extrato - Posição Atual")
+    if dados:
+        colunas_db = ["ID", "Data", "Ativo", "Tipo", "Qtd", "Preço", "Total", "Corretora", "Categoria", "Moeda", "Cambio", "Obs"]
+        if len(dados[0]) == len(colunas_db):
+            df_transacoes = pd.DataFrame(dados, columns=colunas_db)
+            
+            # 2. Calcula o resumo
+            df_mini_extrato = calcular_resumo_ativos(df_transacoes)
+            
+            if not df_mini_extrato.empty:
+                # 3. Exibe a tabela bonitona
+                st.dataframe(
+                    df_mini_extrato,
+                    use_container_width=True, # Ocupa a largura toda
+                    hide_index=True,          # Esconde a coluna de índice 0,1,2...
+                    column_config={
+                        "Ativo": st.column_config.TextColumn("Ativo", width="small"),
+                        "Quantidade": st.column_config.NumberColumn(
+                            "Qtd", 
+                            format="%.4f" # 4 casas decimais (bom para cripto)
+                        ),
+                        "Preço Médio": st.column_config.NumberColumn(
+                            "Preço Médio",
+                            format="R$ %.2f" # Formata dinheiro
+                        ),
+                        "Total Investido": st.column_config.NumberColumn(
+                            "Total Investido",
+                            format="R$ %.2f"
+                        )
+                    }
+                )
+                
+                # (Opcional) Mostra o total geral embaixo
+                total_geral = df_mini_extrato["Total Investido"].sum()
+                st.caption(f"**Patrimônio Total (Custo):** R$ {total_geral:,.2f}")
+                
+            else:
+                st.info("Você não possui ativos em carteira no momento.")
+        else:
+            st.error("Erro na estrutura do banco de dados.")
+    else:
+        st.warning("Nenhuma transação registrada.")
+    st.divider()
     st.header("Histórico de Transações")
     
     with st.expander("Filtros", expanded=True):

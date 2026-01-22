@@ -1,4 +1,4 @@
-import pandas as pd, json, os, yfinance as yf, numpy as np
+import pandas as pd, json, os, yfinance as yf, numpy as np, streamlit as st
 from datetime import datetime, timedelta
 from bcb import sgs
 # Funções de cálculos primários
@@ -64,6 +64,71 @@ def _processar_fluxo_caixa(df):
                 carteira[ativo]['custo_total'] -= custo_saida
     carteira_limpa = {k: v for k, v in carteira.items() if v['qtd'] > 0.000001}
     return carteira_limpa, lucro_acumulado
+
+def calcular_resumo_ativos(df_transacoes):
+    """
+    Calcula a posição atual (Qtd e Preço Médio) de cada ativo.
+    Retorna um DataFrame pronto para exibição.
+    """
+    if df_transacoes.empty:
+        return pd.DataFrame()
+
+    carteira = {}
+    # Estrutura: { 'PETR4': {'qtd': 100, 'custo_total': 2500} }
+
+    # Garante que está ordenado por data para o cálculo funcionar
+    df_sorted = df_transacoes.sort_values('Data')
+
+    for _, row in df_sorted.iterrows():
+        ativo = row['Ativo']
+        tipo = row['Tipo']
+        qtd = row['Qtd']
+        total = row['Total'] # Valor total da transação
+
+        if ativo not in carteira:
+            carteira[ativo] = {'qtd': 0.0, 'custo_total': 0.0}
+        
+        dados = carteira[ativo]
+
+        # Lógica de Compra (Sobe PM)
+        if tipo in ['Compra', 'Aporte', 'Reinvestimento', 'Bonificação']:
+            # Na compra, somamos quantidade e custo
+            dados['qtd'] += qtd
+            dados['custo_total'] += total 
+        
+        # Lógica de Venda (Mantém PM)
+        elif tipo in ['Venda', 'Resgate', 'Saque']:
+            if dados['qtd'] > 0:
+                # O Custo sai proporcionalmente ao PM atual
+                pm_atual = dados['custo_total'] / dados['qtd']
+                custo_saida = qtd * pm_atual
+                
+                dados['qtd'] -= qtd
+                dados['custo_total'] -= custo_saida
+
+    # Monta a tabela final
+    linhas = []
+    for ativo, dados in carteira.items():
+        qtd = dados['qtd']
+        custo = dados['custo_total']
+        
+        # Filtra ativos zerados (que você já vendeu tudo)
+        if qtd > 0.0001:
+            pm = custo / qtd
+            linhas.append({
+                "Ativo": ativo,
+                "Quantidade": qtd,
+                "Preço Médio": pm,
+                "Total Investido": custo
+            })
+            
+    df_resumo = pd.DataFrame(linhas)
+    
+    # Ordena alfabeticamente ou por valor (opcional)
+    if not df_resumo.empty:
+        df_resumo = df_resumo.sort_values("Ativo")
+        
+    return df_resumo
 
 # Funções do rabalanceamento
 
