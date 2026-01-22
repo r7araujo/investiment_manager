@@ -6,6 +6,8 @@ Uma aplicação web desenvolvida em **Python** e **Streamlit** para controle pes
 ![Status do Projeto](https://img.shields.io/badge/Status-Em_Desenvolvimento-yellow)
 ![Python](https://img.shields.io/badge/Python-3.10+-blue)
 ![Streamlit](https://img.shields.io/badge/Streamlit-1.28+-red)
+![Sqlite3](https://img.shields.io/badge/Sqlite3-3.46.1+-green)
+![Docker](https://img.shields.io/badge/Docker-29.1.3+-pink)
 
 ## 🎯 Funcionalidades
 
