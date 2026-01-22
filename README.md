@@ -35,7 +35,7 @@ Uma aplicação web desenvolvida em **Python** e **Streamlit** para controle pes
 
 ## 🚀 Como Executar o Projeto
 
-### ⚠️ **Importante:** O arquivo de banco de dados (`maindata.db`) **não está incluído no repositório** para preservar a privacidade dos dados. Antes de rodar o projeto pela primeira vez, você deve inicializá-lo:
+⚠️ **Importante:** O arquivo de banco de dados (`maindata.db`) **não está incluído no repositório** para preservar a privacidade dos dados. 
 
 🏃‍♂️ Iniciando a Aplicação
 
