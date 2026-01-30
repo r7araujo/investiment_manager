@@ -1,8 +1,15 @@
-import streamlit as st, pandas as pd, plotly.express as px, plotly.graph_objects as go, time, yfinance as yf
+import time
 from datetime import date
-from utils import *
-from database import *
+
+import pandas as pd
+import plotly.express as px
+import plotly.graph_objects as go
+import streamlit as st
+import yfinance as yf
+
 from constants import *
+from database import *
+from utils import *
 # Cria os bancos de dados no maindata.db e consultando os dados
 inicializar_tabela_transacoes()
 inicializar_tabela_config()
@@ -207,7 +214,7 @@ with tab_extrato:
             data_inicial = st.date_input("Data Inicial", date(2023, 1, 1))
             data_final = st.date_input("Data Final", date.today())
         with col_f2:
-            tipos_opcoes = ["Compra", "Venda", "Saque", "Dividendo", "JCP", "Taxa", "Cambio", "Bonificacao"]
+            tipos_opcoes = ["Compra", "Venda", "Saque", "Dividendo", "JCP", "Taxa", "Cambio", "Bonificacao", "Resgate"]
             tipos_selecionados = st.multiselect("Filtrar Tipo", tipos_opcoes, default=tipos_opcoes)
 
     dados = consultar_extrato()

@@ -1,5 +1,8 @@
-import sqlite3, os, json
+import json
+import os
+import sqlite3
 from datetime import datetime
+
 from constants import *
 
 DIRETORIO_ATUAL = os.path.dirname(os.path.abspath(__file__))
@@ -59,9 +62,9 @@ def add_transacao(data, ativo, tipo, quantidade, preco, corretora, categoria, cl
     sql = """
     INSERT INTO transacoes 
     (data, ativo, tipo, quantidade, preco_unitario, valor_total, corretora, categoria, classe, moeda, taxa_cambio, observacao)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     """
-    valores = (data, ativo.upper(), tipo, quantidade, preco, valor_total, corretora, categoria, moeda, cambio, obs)    
+    valores = (data, ativo.upper(), tipo, quantidade, preco, valor_total, corretora, categoria, classe, moeda, cambio, obs)    
     try:
         cursor.execute(sql, valores)
         conn.commit()

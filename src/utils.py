@@ -1,6 +1,13 @@
-import pandas as pd, json, os, yfinance as yf, numpy as np, streamlit as st
+import json
+import os
 from datetime import datetime, timedelta
+
+import numpy as np
+import pandas as pd
+import streamlit as st
+import yfinance as yf
 from bcb import sgs
+
 from constants import *
 
 # Funções de cálculos primários
@@ -164,12 +171,15 @@ def calcular_evolucao_patrimonial(df_sorted, date_range):
                     carteira_temp[ativo]['qtd'] -= qtd
                     carteira_temp[ativo]['custo_total'] -= custo_da_venda
 
-            elif tipo == 'Saque':
+            elif tipo in ['Saque', 'Resgate']:
                 if carteira_temp[ativo]['qtd'] > 0:
                     pm = carteira_temp[ativo]['custo_total'] / carteira_temp[ativo]['qtd']
                     custo_saque = pm * qtd
                     carteira_temp[ativo]['qtd'] -= qtd
                     carteira_temp[ativo]['custo_total'] -= custo_saque
+                
+                # Desconta do aporte do mês (Net Flow)
+                aporte_do_mes -= total
 
         total_investido_mes = sum(item['custo_total'] for item in carteira_temp.values())
         
@@ -190,11 +200,30 @@ def calcular_alocacao_por_classe(df):
         lambda x: 'Renda Fixa' if x in MAPA_CLASSES['Renda Fixa'] else 'Renda Variável'
     )
     
-    # Filtra apenas Compras para ver proporção de entrada (ou poderia ser saldo atual,
-    # mas mantendo a lógica original do app.py que filtrava 'Compra')
-    df_ativos = df_temp[df_temp['Tipo'] == 'Compra']
+    # Calcula a alocação baseada na carteira ATUAL (Saldo de Compras - Vendas/Resgates)
+    carteira_atual = calcular_carteira_atual(df_temp)
     
-    return df_ativos.groupby('Classe_Ativo')['Total'].sum().reset_index()
+    lista_alocacao = []
+    for ativo, dados in carteira_atual.items():
+        if dados['custo_total'] > 0.01:
+             # Recupera categoria original
+             cat = df_temp[df_temp['Ativo'] == ativo]['Categoria'].iloc[-1]
+             # Define classe
+             if cat in MAPA_CLASSES['Renda Fixa']:
+                 classe = 'Renda Fixa'
+             else:
+                 classe = 'Renda Variável'
+                 
+             lista_alocacao.append({
+                 'Classe_Ativo': classe,
+                 'Total': dados['custo_total']
+             })
+             
+    df_chart = pd.DataFrame(lista_alocacao)
+    if df_chart.empty:
+        return pd.DataFrame(columns=['Classe_Ativo', 'Total'])
+        
+    return df_chart.groupby('Classe_Ativo')['Total'].sum().reset_index()
 
 def gerar_tabela_alocacao(carteira, df_transacoes):
     """
