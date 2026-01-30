@@ -1,7 +1,4 @@
-sqlite3
-os
-datetime
-streamlit
+﻿streamlit
 pandas
 plotly
 yfinance
