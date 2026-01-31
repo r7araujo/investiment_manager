@@ -160,6 +160,10 @@ def calcular_evolucao_patrimonial(df_sorted, date_range):
                 carteira_temp[ativo]['qtd'] += qtd
                 carteira_temp[ativo]['custo_total'] += total
                 aporte_do_mes += total 
+            
+            elif tipo == 'Reinvestimento':
+                carteira_temp[ativo]['qtd'] += qtd
+                carteira_temp[ativo]['custo_total'] += total 
                 
             elif tipo == 'Bonificacao':
                 carteira_temp[ativo]['qtd'] += qtd
