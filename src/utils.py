@@ -162,6 +162,7 @@ def calcular_evolucao_patrimonial(df_sorted, date_range):
                 
             elif tipo == 'Bonificacao':
                 carteira_temp[ativo]['qtd'] += qtd
+                carteira_temp[ativo]['custo_total'] += total
                 
             elif tipo == 'Venda':
                 if carteira_temp[ativo]['qtd'] > 0:
@@ -177,12 +178,11 @@ def calcular_evolucao_patrimonial(df_sorted, date_range):
                     carteira_temp[ativo]['qtd'] -= qtd
                     carteira_temp[ativo]['custo_total'] -= custo_saque
                 
-                # Desconta do aporte do mês (Net Flow)
+                # Desconta do aporte do mês
                 aporte_do_mes -= total
 
         total_investido_mes = sum(item['custo_total'] for item in carteira_temp.values())
         
-        # Salva nas listas para o gráfico after month processing
         eixo_datas.append(data_mes)
         eixo_aportes.append(aporte_do_mes)
         eixo_acumulado.append(total_investido_mes)

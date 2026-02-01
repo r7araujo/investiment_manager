@@ -1,12 +1,10 @@
 import time
-from datetime import date
-
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
 import streamlit as st
 import yfinance as yf
-
+from datetime import date
 from constants import *
 from database import *
 from utils import *
