@@ -1,20 +1,18 @@
 import json
 import os
 from datetime import datetime, timedelta
-
 import numpy as np
 import pandas as pd
 import streamlit as st
 import yfinance as yf
 from bcb import sgs
-
 from constants import *
 
 # Funções de cálculos primários
 
 def calcular_total_bonificacoes(df):
     """
-    Retorna apenas a soma financeira do que entrou como Bonificação/Caixinha.
+    Retorna apenas a soma financeira do que entrou como Bonificação.
     """
     if df.empty:
         return 0.0
@@ -39,8 +37,7 @@ def _processar_fluxo_caixa(df):
     """
     Função interna para preço médio
     """
-    if 'Data' in df.columns:
-        df = df.sort_values('Data')
+    df = df.sort_values('Data')
     
     carteira = {}
     lucro_acumulado = 0.0
@@ -53,11 +50,9 @@ def _processar_fluxo_caixa(df):
         
         if ativo not in carteira:
             carteira[ativo] = {'qtd': 0.0, 'custo_total': 0.0}
-        if tipo in ['Compra', 'Aporte', 'Reinvestimento']:
+        if tipo in ['Compra', 'Aporte', 'Reinvestimento', 'Bonificacao']:
             carteira[ativo]['qtd'] += qtd
             carteira[ativo]['custo_total'] += total
-        elif tipo == 'Bonificacao':
-            carteira[ativo]['qtd'] += qtd
         elif tipo in ['Venda', 'Resgate']:
             if carteira[ativo]['qtd'] > 0:
                 pm = carteira[ativo]['custo_total'] / carteira[ativo]['qtd']
@@ -95,7 +90,7 @@ def calcular_resumo_ativos(df_transacoes):
         dados = carteira[ativo]
 
         # Lógica de Compra (Sobe PM)
-        if tipo in ['Compra', 'Aporte', 'Reinvestimento', 'Bonificação']:
+        if tipo in ['Compra', 'Aporte', 'Reinvestimento', 'Bonificacao']:
             dados['qtd'] += qtd
             dados['custo_total'] += total 
         
