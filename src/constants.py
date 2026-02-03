@@ -7,6 +7,19 @@ METAS_PADRAO = {
     "ETF Internacional": 10.0,
     "Criptomoedas": 5.0
 }
+# Para o filtro do extrato
+TIPOS_OPCOES = [
+    "Compra", 
+    "Venda", 
+    "Saque", 
+    "Dividendo", 
+    "JCP", 
+    "Taxa", 
+    "Cambio", 
+    "Bonificacao", 
+    "Resgate", 
+    "Aporte"
+]
 
 # Colunas do maindata.db > transacoes
 COLUNAS_DB = ["ID", "Data", "Ativo", "Tipo", "Qtd", "Preço", "Total", 

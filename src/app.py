@@ -221,7 +221,7 @@ with tab_extrato:
             data_inicial = st.date_input("Data Inicial", date(2023, 1, 1))
             data_final = st.date_input("Data Final", date.today())
         with col_f2:
-            tipos_opcoes = ["Compra", "Venda", "Saque", "Dividendo", "JCP", "Taxa", "Cambio", "Bonificacao", "Resgate", "Aporte"]
+            tipos_opcoes = TIPOS_OPCOES
             tipos_selecionados = st.multiselect("Filtrar Tipo", tipos_opcoes, default=tipos_opcoes)
 
     dados = consultar_extrato()
