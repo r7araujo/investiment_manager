@@ -19,6 +19,25 @@ def calcular_total_bonificacoes(df):
     total = df[df['Tipo'] == 'Bonificacao']['Qtd'].sum()
     return float(total)
 
+def calcular_proventos_ano_atual(df):
+    """
+    Retorna a soma financeira de proventos (Dividendo/JCP) do ano ATUAL.
+    """
+    if df.empty:
+        return 0.0
+    
+    # Garante datetime
+    if not pd.api.types.is_datetime64_any_dtype(df['Data']):
+        df = df.copy()
+        df['Data'] = pd.to_datetime(df['Data'])
+        
+    ano_atual = datetime.now().year
+    mask_ano = df['Data'].dt.year == ano_atual
+    mask_tipo = df['Tipo'].isin(['Dividendo', 'JCP', 'Bonificacao'])
+    
+    total = df.loc[mask_ano & mask_tipo, 'Total'].sum()
+    return float(total)
+
 def calcular_carteira_atual(df):
     """
     Retorna apenas o dicionário da carteira atual (Qtd e Custo de cada ativo).
@@ -151,7 +170,7 @@ def calcular_evolucao_patrimonial(df_sorted, date_range):
             if ativo not in carteira_temp:
                 carteira_temp[ativo] = {'qtd': 0.0, 'custo_total': 0.0}
             
-            if tipo == 'Compra':
+            if tipo in ['Compra', 'Aporte']:
                 carteira_temp[ativo]['qtd'] += qtd
                 carteira_temp[ativo]['custo_total'] += total
                 aporte_do_mes += total 

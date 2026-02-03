@@ -35,14 +35,21 @@ with tab_dash:
         patrimonio_investido = sum(item['custo_total'] for item in carteira.values())
         proventos_caixa = df[df['Tipo'].isin(['Dividendo', 'JCP'])]['Total'].sum()
         renda_passiva_total = proventos_caixa + total_bonificacoes
-        col1, col2, col3 = st.columns(3)
+        proventos_ano = calcular_proventos_ano_atual(df)
+        dy_anual = (proventos_ano / patrimonio_investido * 100) if patrimonio_investido > 0 else 0.0
+
+        col1, col2, col3, col4, col5 = st.columns(5)
         with col1:
             st.metric("Total Investido (Custo)", f"R$ {patrimonio_investido:,.2f}")
         with col2:
-            st.metric("Renda Passiva (Div + Caixinha)", f"R$ {renda_passiva_total:,.2f}")
+            st.metric("Renda Passiva Total", f"R$ {renda_passiva_total:,.2f}")
         with col3:
-            st.metric("Lucro Realizado (Vendas)", f"R$ {lucro_realizado:,.2f}", 
+            st.metric("Lucro Realizado", f"R$ {lucro_realizado:,.2f}", 
                         delta=f"{lucro_realizado:,.2f}" if lucro_realizado != 0 else None)
+        with col4:
+            st.metric("Rendimento Anual (R$)", f"R$ {proventos_ano:,.2f}", help="Soma de Dividendos, JCP e Bonificações deste ano")
+        with col5:
+             st.metric("Yield on Cost Anual", f"{dy_anual:.2f}%", help="Rendimento Anual / Total Investido")
     
     st.divider()
     col_graf1, col_graf2 = st.columns([1, 2])
@@ -58,7 +65,7 @@ with tab_dash:
                 values='Total', 
                 names='Classe_Ativo', 
                 hole=0.5,
-                color_discrete_sequence=['#36a2eb', '#ff6384']
+                color_discrete_sequence=['#4222d7', '#f1ab4e']
             )
             fig_pizza.update_layout(margin=dict(t=20, b=20, l=20, r=20))
             st.plotly_chart(fig_pizza, use_container_width=True)
@@ -88,7 +95,7 @@ with tab_dash:
                     x=eixo_datas, 
                     y=eixo_aportes, 
                     name='Aporte Mensal',
-                    marker_color='rgba(54, 162, 235, 0.6)'
+                    marker_color='#114c0e'
                 ))
                 
                 fig_evolucao.add_trace(go.Scatter(
@@ -96,7 +103,7 @@ with tab_dash:
                     y=eixo_acumulado, 
                     name='Total Investido (Custo)',
                     mode='lines+markers',
-                    line=dict(color='#4bc0c0', width=3)
+                    line=dict(color='#447a37', width=3)
                 ))
                 
                 fig_evolucao.update_layout(
@@ -148,11 +155,13 @@ with tab_dash:
                 st.info(f"Você não possui ativos de {tipo_visualizacao}.")
         with col_detalhes:
             st.subheader("🔍 Detalhes")
-            cat_unicas = sorted(df_posicao['Categoria'].unique().tolist())
-            filtro_tabela = st.selectbox("Filtrar Tabela:", ["Todos"] + cat_unicas)
+            # cat_unicas = sorted(df_posicao['Categoria'].unique().tolist()) # Removido
+            # Agora filtramos por CLASSE (Renda Fixa ou Variável)
+            opcoes_filtro = ["Todos", "Renda Variável", "Renda Fixa"]
+            filtro_tabela = st.selectbox("Filtrar Tabela:", opcoes_filtro)
             
             if filtro_tabela != "Todos":
-                df_exibir = df_posicao[df_posicao['Categoria'] == filtro_tabela]
+                df_exibir = df_posicao[df_posicao['Classe'] == filtro_tabela]
             else:
                 df_exibir = df_posicao 
             
@@ -212,7 +221,7 @@ with tab_extrato:
             data_inicial = st.date_input("Data Inicial", date(2023, 1, 1))
             data_final = st.date_input("Data Final", date.today())
         with col_f2:
-            tipos_opcoes = ["Compra", "Venda", "Saque", "Dividendo", "JCP", "Taxa", "Cambio", "Bonificacao", "Resgate"]
+            tipos_opcoes = ["Compra", "Venda", "Saque", "Dividendo", "JCP", "Taxa", "Cambio", "Bonificacao", "Resgate", "Aporte"]
             tipos_selecionados = st.multiselect("Filtrar Tipo", tipos_opcoes, default=tipos_opcoes)
 
     dados = consultar_extrato()
