@@ -7,19 +7,13 @@ METAS_PADRAO = {
     "ETF Internacional": 10.0,
     "Criptomoedas": 5.0
 }
+# Corretoras
+CORRETORAS = ["XP", "Binance", "Nubank", "Outra"]
+# Colunas do extrato
+COLS_VISUAIS = ["Data", "Ativo", "Tipo", "Categoria", "Classe", "Qtd", "Preço", "Total", "Corretora", "Obs"]
+
 # Para o filtro do extrato
-TIPOS_OPCOES = [
-    "Compra", 
-    "Venda", 
-    "Saque", 
-    "Dividendo", 
-    "JCP", 
-    "Taxa", 
-    "Cambio", 
-    "Bonificacao", 
-    "Resgate", 
-    "Aporte"
-]
+TIPOS_OPCOES = ["Compra", "Venda", "Saque", "Dividendo", "JCP", "Taxa", "Cambio", "Bonificacao", "Resgate", "Aporte", "Reinvestimento"]
 
 # Colunas do maindata.db > transacoes
 COLUNAS_DB = ["ID", "Data", "Ativo", "Tipo", "Qtd", "Preço", "Total", 

@@ -40,16 +40,16 @@ with tab_dash:
 
         col1, col2, col3, col4, col5 = st.columns(5)
         with col1:
-            st.metric("Total Investido (Custo)", f"R$ {patrimonio_investido:,.2f}")
+            st.metric("Total Investido", f"R$ {patrimonio_investido:,.2f}")
         with col2:
             st.metric("Renda Passiva Total", f"R$ {renda_passiva_total:,.2f}")
         with col3:
             st.metric("Lucro Realizado", f"R$ {lucro_realizado:,.2f}", 
                         delta=f"{lucro_realizado:,.2f}" if lucro_realizado != 0 else None)
         with col4:
-            st.metric("Rendimento Anual (R$)", f"R$ {proventos_ano:,.2f}", help="Soma de Dividendos, JCP e Bonificações deste ano")
+            st.metric("Rendimento Passivo Anual (R$)", f"R$ {proventos_ano:,.2f}", help="Soma de Dividendos, JCP e Bonificações deste ano")
         with col5:
-             st.metric("Yield on Cost Anual", f"{dy_anual:.2f}%", help="Rendimento Anual / Total Investido")
+             st.metric("Rentabilidade Anual", f"{dy_anual:.2f}%", help="Rendimento Anual / Total Investido")
     
     st.divider()
     col_graf1, col_graf2 = st.columns([1, 2])
@@ -233,7 +233,7 @@ with tab_extrato:
         mask_tipo = df['Tipo'].isin(tipos_selecionados)
         df_filtrado = df.loc[mask_data & mask_tipo]
         df_filtrado = df_filtrado.sort_values(by="Data", ascending=False)
-        cols_visuais = ["Data", "Ativo", "Tipo", "Categoria", "Classe", "Qtd", "Preço", "Total", "Corretora", "Obs"]
+        cols_visuais = COLS_VISUAIS
         st.dataframe(
             df_filtrado[cols_visuais], 
             hide_index=True, 
@@ -266,12 +266,11 @@ with tab_registrar:
             with c1:
                 ativo = st.text_input("Ativo").upper()
             with c2:
-                tipo = st.selectbox("Tipo", ['Compra', 'Venda', 'Dividendo', 'JCP', 'Taxa', 'Bonificacao', 'Cambio',
-            'Aporte', 'Resgate', 'Reinvestimento'])
+                tipo = st.selectbox("Tipo", TIPOS_OPCOES)
             
             col_cat1, col_cat2 = st.columns(2)
             with col_cat1:
-                corretora = st.selectbox("Corretora", ["XP", "Binance", "Nubank", "Outra"])
+                corretora = st.selectbox("Corretora", CORRETORAS)
             with col_cat2:
                 categoria = st.selectbox("Categoria do Ativo", LISTA_CATEGORIAS)
 
