@@ -327,72 +327,100 @@ with tab_registrar:
             st.error("Erro: Arquivo 'maindata.db' não encontrado.")
 
 with tab_atual:
-    st.header("📈 Posição Atual (Online)")
-    
+    col_header, col_btn = st.columns([4, 1])
+    with col_header:
+        st.header("📈 Atualidades & Mercado")
+    with col_btn:
+        if st.button("🔄 Atualizar Dados", use_container_width=True):
+            limpar_cache()
+            st.rerun()
+
     dados = consultar_extrato()
     if not dados:
-        st.warning("Sem dados cadastrados.")
+        st.warning("Sem dados cadastrados. Adicione transações para ver as novidades.")
     else:
         df = pd.DataFrame(dados, columns=COLUNAS_DB)
-        
-        # Recalcula carteira
         carteira_atual = calcular_carteira_atual(df)
-        
+
         if not carteira_atual:
-            st.info("Carteira vazia.")
+            st.info("Sua carteira está zerada no momento.")
         else:
-            with st.spinner("Buscando cotações online no Yahoo Finance..."):
+            with st.spinner("Sintonizando frequências do mercado..."):
+                 # 1. Painel Resumo (Valores)
                 df_rentabilidade, resumo = gerar_painel_rentabilidade(carteira_atual, df)
-            
-            # --- Métricas de Cabeçalho ---
-            col_m1, col_m2, col_m3 = st.columns(3)
-            with col_m1:
-                st.metric("Patrimônio Atual (Estimado)", f"R$ {resumo['valor_atual']:,.2f}")
-            with col_m2:
-                cor_delta = "normal"
-                if resumo['lucro_total_rs'] > 0: cor_delta = "normal" # Verde padrao
-                elif resumo['lucro_total_rs'] < 0: cor_delta = "inverse" # Vermelho
+
+                # Big Metrics
+                kpi1, kpi2, kpi3 = st.columns(3)
+                kpi1.metric("Patrimônio Estimado", f"R$ {resumo['valor_atual']:,.2f}")
                 
-                st.metric(
-                    "Lucro/Prej. Total (Não Realizado)", 
-                    f"R$ {resumo['lucro_total_rs']:,.2f}",
-                    delta=f"{resumo['lucro_total_pct']:.2f}%"
-                )
-            with col_m3:
-                st.metric("Custo de Aquisição", f"R$ {resumo['custo_total']:,.2f}")
+                delta_val = resumo['lucro_total_rs']
+                delta_color = "normal" if delta_val >= 0 else "inverse"
+                kpi2.metric("Resultado (Não Realizado)", f"R$ {delta_val:,.2f}", f"{resumo['lucro_total_pct']:.2f}%", delta_color=delta_color)
                 
-            st.divider()
-            
-            # --- Tabela Detalhada ---
-            st.subheader("Rentabilidade por Ativo")
-            
-            if not df_rentabilidade.empty:
-                st.dataframe(
-                    df_rentabilidade,
-                    hide_index=True,
-                    use_container_width=True,
-                    column_config={
-                        "Ativo": st.column_config.TextColumn("Ativo", width="small"),
-                        "Qtd": st.column_config.NumberColumn("Qtd", format="%.4f"),
-                        "PM": st.column_config.NumberColumn("Preço Médio", format="R$ %.2f"),
-                        "Cotação Atual": st.column_config.NumberColumn("Cotação (Yahoo)", format="R$ %.2f"),
-                        "Valor Atual": st.column_config.NumberColumn("Saldo Atual", format="R$ %.2f"),
-                        "Lucro (R$)": st.column_config.NumberColumn("Lucro R$", format="R$ %.2f"),
-                        "Var (%)": st.column_config.NumberColumn(
-                            "Var %", 
-                            format="%.2f %%"
-                        ),
-                        "Status": st.column_config.TextColumn("Status", width="small")
-                    }
-                )
+                kpi3.metric("Custos", f"R$ {resumo['custo_total']:,.2f}")
+                st.divider()
+
+                # 2. Destaques / Cards de Ativos
+                st.subheader("📰 Giro da Carteira")
                 
-                # Aviso se houver algum offline
-                if "⚠️ Offline" in df_rentabilidade["Status"].values:
-                    st.warning("⚠️ Alguns ativos não tiveram cotação encontrada e estão exibindo o preço de custo (PM) para não distorcer o total.")
-                
-                st.caption("*Cotações com delay de 15 min ou fechamento anterior. Fonte: Yahoo Finance.")
-            else:
-                st.info("Nenhum ativo elegível para cotação.")
+                # Vamos iterar pelos ativos Renda Variável para mostrar info rica
+                # Filtra apenas o que tem no df_rentabilidade (que já filtra RV)
+                if not df_rentabilidade.empty:
+                    ativos_exibir = df_rentabilidade['Ativo'].tolist()
+                    
+                    # Layout em Grid (2 colunas)
+                    cols = st.columns(2)
+                    
+                    for idx, ativo in enumerate(ativos_exibir):
+                        # Alterna colunas
+                        col_atual = cols[idx % 2]
+                        
+                        dados_ativo = df_rentabilidade[df_rentabilidade['Ativo'] == ativo].iloc[0]
+                        info_detalhada = obter_detalhes_ativo(ativo)
+                        
+                        with col_atual.container(border=True):
+                            # Cabeçalho do Card
+                            c_topo1, c_topo2 = st.columns([3, 1])
+                            c_topo1.markdown(f"### {ativo}")
+                            c_topo1.caption(f"{info_detalhada['longName']}")
+                            
+                            var_pct = dados_ativo['Var (%)']
+                            cor_var = "🟢" if var_pct >= 0 else "🔴"
+                            c_topo2.metric("Variação", f"{var_pct:.2f}%")
+                            
+                            st.markdown(f"**Setor:** {info_detalhada['sector']}")
+                            
+                            # Descrição com Expander
+                            with st.expander("Sobre a Empresa", expanded=False):
+                                st.write(info_detalhada['longBusinessSummary'])
+                                
+                            # Últimas Notícias
+                            noticias = info_detalhada['news']
+                            if noticias:
+                                st.markdown("##### 🗞️ Últimas Notícias")
+                                for n in noticias:
+                                    titulo = n.get('title', 'Sem título')
+                                    link = n.get('link', '#')
+                                    # Hack para data
+                                    pub_time = n.get('providerPublishTime', 0)
+                                    dt_noticia = datetime.fromtimestamp(pub_time).strftime('%d/%m %H:%M') if pub_time else ""
+                                    
+                                    st.markdown(f"- [{titulo}]({link}) `({dt_noticia})`")
+                            else:
+                                st.caption("Sem notícias recentes encontradas.")
+                                
+                            # Footer do card com posição financeira
+                            st.divider()
+                            f1, f2, f3 = st.columns(3)
+                            f1.caption("Preço Atual")
+                            f1.markdown(f"**R$ {dados_ativo['Cotação Atual']:,.2f}**")
+                            f2.caption("Meu Preço Médio")
+                            f2.markdown(f"R$ {dados_ativo['PM']:,.2f}")
+                            f3.caption("Saldo")
+                            f3.markdown(f"R$ {dados_ativo['Valor Atual']:,.2f}")
+
+                else:
+                    st.info("Nenhum ativo de Renda Variável para exibir notícias.")
 
 with tab_rebal:
         st.header("⚖️ Rebalanceamento de Carteira")

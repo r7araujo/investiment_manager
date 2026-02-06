@@ -299,10 +299,12 @@ def calcular_cenarios_simulacao(qtd_atual, preco_simulado, pm_atual):
 
 # Funções que puxam dados externos
 
+@st.cache_data(ttl=3600)
 def obter_cotacao_online(lista_tickers):
     """
     Busca cotação online via yfinance.
     Tenta em lote primeiro. Se falhar, tenta individualmente.
+    Cache de 1 hora.
     """
     if not lista_tickers:
         return {}
@@ -341,7 +343,7 @@ def obter_cotacao_online(lista_tickers):
                         if not pd.isna(val):
                             cotacoes[t_orig] = float(val)
     except Exception as e:
-        st.write(f"Erro no download em lote: {e}")
+        print(f"Erro no download em lote: {e}") # Changed st.write to print to avoid UI clutter in cache func
     # Fallback: Verifica quem ficou sem cotação e tenta individualmente
     faltantes = [t for t in lista_tickers if t not in cotacoes]
     if faltantes:
@@ -362,6 +364,45 @@ def obter_cotacao_online(lista_tickers):
                 cotacoes[t] = val
                 
     return cotacoes
+
+def limpar_cache():
+    """Limpa o cache de dados do Streamlit"""
+    st.cache_data.clear()
+
+@st.cache_data(ttl=86400) # Cache de 24h para infos estáticas
+def obter_detalhes_ativo(ticker):
+    """
+    Busca informações detalhadas e notícias de um ativo.
+    Retorna dict com summary, sector, news, etc.
+    """
+    # Normalização de ticker igual ao obter_cotacao
+    t_str = str(ticker).upper().strip()
+    t_final = t_str
+    if t_str in ["BTC", "ETH", "USDT", "BNB", "SOL", "XRP", "ADA", "DOGE", "AVAX"]:
+            t_final = f"{t_str}-BRL"
+    elif len(t_str) >= 5 and t_str[-1].isdigit() and ".SA" not in t_str:
+            t_final = f"{t_str}.SA"
+            
+    try:
+        t = yf.Ticker(t_final)
+        info = t.info
+        news = t.news
+        
+        return {
+            "longName": info.get("longName", t_final),
+            "sector": info.get("sector", "Desconhecido"),
+            "industry": info.get("industry", "-"),
+            "longBusinessSummary": info.get("longBusinessSummary", "Sem descrição disponível."),
+            "news": news[:3] if news else [] # Top 3 noticias
+        }
+    except Exception as e:
+        return {
+            "longName": t_final,
+            "sector": "-",
+            "industry": "-",
+            "longBusinessSummary": f"Erro ao buscar detalhes: {str(e)}",
+            "news": []
+        }
 
 def _buscar_ticker_individual(ticker):
     """Helper para buscar 1 ticker específico"""
